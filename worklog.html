@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<!--
+  Worklog — a local, plain-text project and task journal.
+  Copyright (c) 2026 The Worklog authors
+  Released under the MIT License. See the LICENSE file. This notice must be kept in all copies.
+
+  This file is the complete application and is not minified. The separate source files it is
+  built from are in the source/ folder.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worklog</title>
+<style>
+/* 主题 = 一组变量。新增主题：复制一段 :root[data-theme=…]，再到 app.js 的 THEMES 里登记名字 */
+:root,:root[data-theme=light]{--bg:#fff;--panel:#fff;--ink:#1C2024;--ink2:#3A434C;--muted:#5B6570;--faint:#8A939D;--line:#E3E6EA;--line2:#C9CED4;--soft:#F6F7F9;--accent:#2459D6;--on:#fff;--edit:#F3F6FE;--kind0:#6B3FA0;
+--todo-bg0:#E4ECFD;--todo0:#1B47B5;--wait-bg0:#FCEBD3;--wait0:#8A4B00;--done-bg:#E6EAEE;--done:#4A545E;--warn-bg:#FFF1C7;--warn:#6B4E00;--err-bg:#FDE3E1;--err:#9B1C13;--ok-bg0:#DDF3E4;--ok0:#17603A;--shadow:rgba(28,32,36,.14);
+--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color-scheme:light}
+:root[data-theme=dark]{--bg:#15181C;--panel:#1C2025;--ink:#E6E9EC;--ink2:#C3C9CF;--muted:#98A2AC;--faint:#6F7882;--line:#2B3138;--line2:#3B434C;--soft:#1C2025;--accent:#7AA2FF;--on:#15181C;--edit:#1D2638;--kind0:#C3A0F0;
+--todo-bg0:#1E2C4D;--todo0:#A9C2FF;--wait-bg0:#41301A;--wait0:#F2C078;--done-bg:#2A3038;--done:#A6AFB8;--warn-bg:#40361A;--warn:#F0D684;--err-bg:#472220;--err:#FFB1AA;--ok-bg0:#1B3A29;--ok0:#8ED8A9;--shadow:rgba(0,0,0,.5);color-scheme:dark}
+/* 颜色风格：只管着色的文字和标签（人名、类型、状态、项目引用、胶囊），不动背景和界面本身 */
+:root{--person:var(--accent);--kind:var(--kind0);--todo:var(--todo0);--todo-bg:var(--todo-bg0);--wait:var(--wait0);--wait-bg:var(--wait-bg0);--ok:var(--ok0);--ok-bg:var(--ok-bg0);--done-fg:var(--done);--done-chip:var(--done-bg);--tagw:400}
+:root[data-color=soft]{--person:color-mix(in srgb,var(--accent) 45%,var(--muted));--kind:color-mix(in srgb,var(--kind0) 45%,var(--muted));--todo:color-mix(in srgb,var(--todo0) 50%,var(--muted));--todo-bg:color-mix(in srgb,var(--todo-bg0) 45%,var(--soft));--wait:color-mix(in srgb,var(--wait0) 50%,var(--muted));--wait-bg:color-mix(in srgb,var(--wait-bg0) 45%,var(--soft));--ok:color-mix(in srgb,var(--ok0) 50%,var(--muted));--ok-bg:color-mix(in srgb,var(--ok-bg0) 45%,var(--soft))}
+:root[data-color=mono]{--person:var(--ink);--kind:var(--muted);--todo:var(--on);--todo-bg:var(--ink2);--wait:var(--ink);--wait-bg:var(--line2);--ok:var(--muted);--ok-bg:var(--line);--done-fg:var(--faint);--done-chip:var(--soft);--tagw:600}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:15px/1.6 system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--bg)}
+button,textarea,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+[hidden]{display:none!important}
+#gate{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center}
+#gate h1{margin:0;font-size:22px;font-weight:600}
+#gate p{margin:0;color:var(--muted);max-width:460px}
+#app{height:100%;display:flex}
+#col{flex:1;min-width:0;display:flex;flex-direction:column}
+#journal{flex:1;min-height:0;display:flex;flex-direction:column}
+/* 侧栏 */
+#nav{flex:0 0 200px;display:flex;flex-direction:column;gap:8px;padding:10px;border-right:1px solid var(--line);background:var(--soft)}
+#nav-head{display:flex;align-items:center;justify-content:space-between;height:32px;padding-left:8px}
+#brand{font-weight:600}
+#nav-toggle{border:0;background:transparent;color:var(--muted);width:28px;height:28px;border-radius:6px}
+#nav-toggle:hover{background:var(--line)}
+#q{height:32px;width:100%;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:0 10px;font-size:13px}
+#nav-items{display:flex;flex-direction:column;gap:2px}
+.nav-item{display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border:0;border-radius:8px;background:transparent;font-size:14px;text-align:left;color:var(--ink2)}
+.nav-item:hover{background:var(--line)}
+.nav-item.on{background:var(--ink);color:var(--on)}
+.nav-label{flex:1}
+.ico{width:22px;height:22px;flex:none}
+.count{min-width:18px;padding:0 5px;border-radius:9px;background:var(--line);color:var(--muted);font-size:11px;font-weight:600;text-align:center;line-height:18px}
+.count.warn{background:var(--warn-bg);color:var(--warn)}
+#nav.narrow{flex-basis:56px;padding:10px 8px}
+#nav.narrow #brand,#nav.narrow #q,#nav.narrow .nav-label,#nav.narrow .count{display:none}
+#nav.narrow #nav-head{padding:0;justify-content:center}
+#nav.narrow .nav-item{justify-content:center;padding:0}
+/* 日志页 */
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--line)}
+header h1{margin:0 6px;font-size:17px;font-weight:600}
+.btn{height:32px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px}
+.btn:hover{background:var(--soft)}
+.btn.primary{height:40px;padding:0 18px;background:var(--ink);color:var(--on);border-color:var(--ink);font-size:14px}
+.btn.sq{width:32px;padding:0;font-size:16px}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--on);border-color:var(--ink)}
+.chip{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--soft);border-radius:6px;padding:2px 8px}
+.grow{flex:1}
+#banner{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 16px;background:var(--warn-bg);color:var(--warn);font-size:14px}
+main{flex:1;display:flex;min-height:0}
+#editor-wrap{flex:1 1 0;min-width:0;overflow:auto;padding:16px 20px 80px}
+#side{flex:0 0 44%;max-width:640px;border-left:1px solid var(--line);background:var(--soft);overflow:auto;padding:14px 16px}
+footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--faint);font-family:var(--mono)}
+#saved{opacity:.75}
+.kids{margin-left:11px;padding-left:19px;border-left:1px solid var(--line)}
+.row{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;padding:3px 8px;border-radius:8px;min-height:32px}
+.row.editing{background:var(--edit);outline:2px solid var(--accent)}
+.row.deleted .view{text-decoration:line-through;color:var(--muted)}
+.row.raw .view{font-family:var(--mono);font-size:13px;color:var(--muted);cursor:default}
+.bullet{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none;margin-top:9px}
+.bullet.square{border-radius:2px;background:var(--ink)}
+.bullet.ring{border-radius:2px;background:var(--bg);border:2px solid var(--ink)}
+.row.editing .bullet{background:var(--accent)}
+.body{flex:1 1 220px;min-width:0}
+.view{cursor:text;min-height:24px;white-space:pre-wrap;word-break:break-word}
+.view .cont{color:var(--ink2)}
+.ph{color:var(--faint)}
+.row textarea{display:none;width:100%;border:0;outline:0;background:transparent;resize:none;padding:0;margin:0;overflow:hidden;line-height:1.6}
+.row.decl textarea{font-weight:600}
+.row.editing textarea{display:block}
+.row.editing .view{display:none}
+.person{color:var(--person);font-weight:var(--tagw);cursor:pointer}.kind{color:var(--kind);cursor:pointer}
+.person:hover,.kind:hover{text-decoration:underline}
+.ref{background:var(--todo-bg);color:var(--todo);border-radius:6px;padding:0 6px;font-size:14px}
+.ref.rec{background:var(--done-bg);color:var(--ink2)}
+.status{font-size:12px;font-weight:600;border:0;border-radius:6px;padding:2px 8px;margin-top:2px;white-space:nowrap}
+.status.TODO{background:var(--todo-bg);color:var(--todo)}.status.WAIT{background:var(--wait-bg);color:var(--wait)}.status.DONE{background:var(--done-chip);color:var(--done-fg)}
+.status-edit{font-family:var(--mono);font-size:12px;width:158px;border:1px solid var(--accent);border-radius:6px;padding:1px 6px;margin-top:2px;outline:0;background:var(--panel)}
+.muted{color:var(--muted);font-size:13px}
+.tag{font-size:11px;border-radius:9px;padding:1px 8px;margin-top:4px;white-space:nowrap}
+.tag.line{border:1px solid var(--line2);color:var(--ink2);background:var(--panel)}
+.tag.dash{border:1px dashed var(--muted);color:var(--ink2);background:var(--panel)}
+.tag.warn{background:var(--warn-bg);color:var(--warn)}.tag.err{background:var(--err-bg);color:var(--err)}
+.mini{font-size:12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:1px 8px;margin-top:2px}
+.mini.del{opacity:0;border-color:transparent;color:var(--muted)}
+.row:hover .mini.del,.row.editing .mini.del,.mini.del:focus{opacity:1;border-color:var(--line)}
+#add{margin:10px 0 0 8px;border:1px dashed var(--line2);background:var(--panel);color:var(--muted);border-radius:8px;padding:4px 12px;font-size:13px}
+#ac{position:fixed;z-index:20;width:380px;max-width:calc(100vw - 16px);background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 8px 24px var(--shadow);padding:6px;display:flex;flex-direction:column;gap:2px}
+.ac-item{display:flex;flex-direction:column;align-items:flex-start;text-align:left;border:0;border-radius:6px;background:var(--panel);padding:6px 10px}
+.ac-item.create{border-top:1px solid var(--line);border-radius:0 0 6px 6px}
+.ac-item.on{background:var(--ink);color:var(--on)}
+.ac-title{font-weight:600}.ac-sub{font-size:13px;color:var(--muted)}.ac-item.on .ac-sub{color:var(--on)}
+#raw{margin:0;font-family:var(--mono);font-size:12px;line-height:1.75;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-all}
+.ln .meta{color:var(--faint)}
+.ln.chg{animation:flash 2.4s ease-out}
+@keyframes flash{0%,35%{background:var(--warn-bg)}100%{background:transparent}}
+/* 只读视图 */
+#view{flex:1;min-height:0;overflow:auto;padding:16px 24px 80px}
+#view h1{margin:0 0 14px;font-size:17px;font-weight:600}
+#view h2{margin:22px 0 8px;font-size:12px;font-weight:600;color:var(--muted)}
+.empty{color:var(--faint);font-size:13px;margin:4px 0}
+.rec{position:relative;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 10px;padding:2px 32px 2px 6px;border-radius:6px;cursor:pointer}
+.rec:hover,.rec.cur,.row.cur,.pj-head.cur,.grp-head.cur{background:var(--soft)}
+.pj-head.cur .fold,.grp-head.cur .fold{background:var(--line);color:var(--ink)}
+.row.cur.editing,.rec.cur.editing{background:var(--edit)}
+.rec .status{margin:0;font-size:11px;padding:1px 7px}
+.rec-date{font-family:var(--mono);font-size:12px;color:var(--faint);flex:none}
+.rec-text{flex:1 1 7em;min-width:0;word-break:break-word}
+.rec-path{display:flex;flex:0 1 auto;min-width:0;max-width:100%;margin-left:auto;font-size:12px;color:var(--faint);white-space:pre;cursor:pointer}
+.rec-path .up{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.rec-path .leaf{flex:0 1 auto;min-width:3em;overflow:hidden;text-overflow:ellipsis}
+.rec-path:hover{color:var(--ink2);text-decoration:underline}
+.rec.editable{cursor:text}
+.rec.editing{background:var(--edit);outline:2px solid var(--accent)}
+.rec textarea{display:block;width:100%;border:0;outline:0;background:transparent;resize:none;padding:0;margin:0;overflow:hidden;line-height:1.6}
+.goto{position:absolute;right:5px;top:4px;width:22px;height:22px;padding:3px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--faint);opacity:0;display:flex}
+.goto svg{width:14px;height:14px}
+.goto.in{position:static;flex:none}
+.rec:hover .goto,.rec.editing .goto,.rec.cur .goto,.pj-head:hover .goto,.grp-head:hover .goto,.pj-head.cur .goto,.grp-head.cur .goto,.goto:focus-visible{opacity:1}
+.goto:hover{border-color:var(--line2);background:var(--panel);color:var(--ink)}
+.rec.deleted .rec-text{text-decoration:line-through;color:var(--muted)}
+.rec.stale .status{outline:1.5px solid currentColor}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px}
+.col{min-width:0}
+.col h2{margin-top:0!important}
+.pj.top{margin-bottom:18px}
+.pj-head{display:flex;align-items:center;gap:8px;padding:2px 6px 2px 2px;border-radius:8px;min-height:30px}
+.pj-head.foldable{cursor:pointer}
+.pj-head.foldable:hover{background:var(--soft)}
+.pj-head.foldable:hover .fold{background:var(--line);color:var(--ink)}
+.fold{border:0;background:transparent;color:var(--muted);width:24px;height:24px;padding:4px;border-radius:6px;flex:none;display:flex}
+.fold svg{width:16px;height:16px;transition:transform .12s}
+.fold.open svg{transform:rotate(90deg)}
+.fold:hover{background:var(--line2)!important}
+.pj-name{border:0;background:transparent;padding:0;font-weight:600;text-align:left}
+.pj-name:hover{text-decoration:underline}
+.pj-count{font-weight:600}
+.pj-meta{font-size:11px;color:var(--faint)}
+.cap{font-size:10px;border-radius:9px;padding:0 7px;line-height:16px}
+.cap.ongoing{background:var(--wait-bg);color:var(--wait)}.cap.ready{background:var(--done-bg);color:var(--done)}.cap.completed{background:var(--ok-bg);color:var(--ok)}.cap.archived{background:var(--done-bg);color:var(--done)}
+.mini.act{opacity:0;margin:0;border-color:transparent;background:transparent;color:var(--faint);font-size:11px}
+.mini.act:hover{border-color:var(--line2);color:var(--ink);background:var(--panel)}
+.pj-head:hover .mini.act,.mini.act:focus{opacity:1}
+.pj-body{margin-left:13px;padding:2px 0 2px 14px;border-left:1px solid var(--line2)}
+.pj-body>.pj{margin-top:4px}
+.more{border:0;background:transparent;color:var(--faint);font-size:12px;padding:0 6px}
+.more:hover{text-decoration:underline}
+.issue{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;border:0;background:transparent;padding:3px 6px;border-radius:6px;font-size:14px}
+.issue:hover{background:var(--soft)}
+.lvl{flex:0 0 44px;font-size:11px;font-weight:600;border-radius:9px;text-align:center}
+.issue.warn .lvl{background:var(--warn-bg);color:var(--warn)}.issue.error .lvl,.issue.block .lvl{background:var(--err-bg);color:var(--err)}
+.set-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);max-width:640px}
+.set-label{flex:0 0 160px;font-size:14px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;height:32px}
+.seg button{border:0;border-left:1px solid var(--line);background:var(--panel);padding:0 12px;font-size:13px}
+.seg button:first-child{border-left:0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--on)}
+.set-row input{height:32px;width:80px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:0 8px}
+#view h1{display:flex;align-items:center;gap:14px}
+.seg.small{height:26px;font-weight:400}.seg.small button{font-size:12px;padding:0 10px}
+.pj.acc{margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.graph{overflow-x:auto;margin:4px 0 6px}
+.graph svg{display:block}
+.g-grid{stroke:var(--line);stroke-width:1}
+.g-tick{font:10px var(--mono);fill:var(--faint)}
+.g-line{stroke:var(--line2);stroke-width:2;fill:none;stroke-linecap:round}
+.g-line.done{stroke:var(--ok)}
+.g-end{fill:var(--ok)}
+.g-name{font-size:13px;fill:var(--ink2);cursor:pointer}.g-name.main{font-weight:600;fill:var(--ink)}
+.g-name:hover{text-decoration:underline}
+.g-meta{font-size:11px;fill:var(--faint)}
+.g-dot{fill:var(--ink);stroke:var(--bg);stroke-width:1.5;cursor:pointer}
+.g-dot:hover{fill:var(--person)}
+.crumb{font-size:12px;color:var(--faint);margin-bottom:4px}
+.link{border:0;background:transparent;padding:0;color:var(--muted);font-size:12px}.link:hover{text-decoration:underline}
+.pj-head.page{margin-bottom:10px;padding-left:0}.pj-head.page .pj-name{font-size:17px}.pj-head.page .mini.act{opacity:1}
+.day{font-family:var(--mono);font-size:12px;color:var(--faint);margin:10px 0 2px 6px}
+.pjlink,.ref[data-pj]{cursor:pointer}.pjlink:hover{text-decoration:underline}
+.btn.small{height:26px;font-size:12px;font-weight:400;padding:0 10px}
+#view h1 .pj-count{font-weight:400;color:var(--faint);font-size:14px;margin-left:-6px}
+#view .group{display:flex;align-items:center;gap:8px;border-radius:8px;padding:2px 6px 2px 2px;cursor:pointer;font-size:14px;font-weight:600;color:var(--ink);margin:16px 0 4px}
+.icon-btn{width:28px;height:28px;padding:4px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--faint);display:flex}
+.icon-btn svg{width:18px;height:18px}
+.icon-btn.sort.up svg{transform:scaleY(-1)}
+#view h1 .icon-btn+.icon-btn{margin-left:-8px}
+.icon-btn:hover{background:var(--soft);color:var(--ink);border-color:var(--line)}
+.icon-btn[aria-pressed="true"]{background:var(--line);color:var(--ink)}
+#view .group:hover{background:var(--soft)}
+#help-btn{align-self:flex-start;width:28px;height:28px;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--muted);font-size:13px;margin-left:5px}
+#help-btn:hover{background:var(--line);color:var(--ink)}
+#nav.narrow #help-btn{align-self:center;margin:0}
+#help{border:1px solid var(--line2);border-radius:12px;background:var(--panel);color:var(--ink);padding:18px 22px;width:min(720px,calc(100vw - 32px));box-shadow:0 12px 40px var(--shadow)}
+#help::backdrop{background:rgba(0,0,0,.35)}
+.help-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.help-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 28px}
+.help-grid h2{margin:14px 0 6px;font-size:12px;font-weight:600;color:var(--muted)}
+.help-row{display:flex;gap:12px;align-items:baseline;padding:2px 0;font-size:13px}
+.help-row kbd{flex:0 0 138px;font:12px var(--mono);color:var(--ink2);background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:1px 6px;white-space:pre}
+@media (max-width:640px){.help-grid{grid-template-columns:1fr}}
+.set-val{font-size:14px;color:var(--ink2)}
+#toast{position:fixed;left:50%;bottom:36px;transform:translateX(-50%);background:var(--ink);color:var(--on);padding:8px 16px;border-radius:8px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30;max-width:90vw}
+#toast.show{opacity:1}
+@media (max-width:900px){main{flex-direction:column}#side{flex:none;max-width:none;border-left:0;border-top:1px solid var(--line)}.cols{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="gate">
+  <h1>Worklog</h1>
+  <p id="gate-msg">Choose the Worklog folder, the one that contains this file. Your records are kept there as plain text files, in its <code>data</code> folder.</p>
+  <button class="btn primary" id="regrant" hidden></button>
+  <button class="btn primary" id="pick">Choose workspace folder</button>
+</div>
+<div id="app" hidden>
+  <nav id="nav" aria-label="Main">
+    <div id="nav-head"><span id="brand">Worklog</span><button id="nav-toggle">«</button></div>
+    <input id="q" type="search" placeholder="Search" title="Search (/)" aria-label="Search records">
+    <div id="nav-items"></div>
+    <span class="grow"></span>
+    <button id="help-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+  </nav>
+  <div id="col">
+    <div id="banner" role="alert" hidden></div>
+    <div id="journal">
+      <header>
+        <button class="btn sq" id="prev" title="Previous day" aria-label="Previous day">‹</button>
+        <button class="btn sq" id="next" title="Next day" aria-label="Next day">›</button>
+        <button class="btn" id="today" title="Go to today">Today</button>
+        <h1 id="title"></h1>
+        <span class="chip" id="file"></span>
+        <span class="grow"></span>
+        <button class="btn" id="side-toggle" title="Show file source" aria-pressed="false">Source</button>
+      </header>
+      <main>
+        <section id="editor-wrap" aria-label="Journal">
+          <div id="editor"></div>
+          <button id="add">+ New block</button>
+        </section>
+        <aside id="side" hidden><pre id="raw"></pre></aside>
+      </main>
+    </div>
+    <div id="view" hidden></div>
+    <footer><span id="stats"></span><span class="grow"></span><span id="saved" role="status"></span></footer>
+  </div>
+</div>
+<div id="ac" hidden></div>
+<dialog id="help" aria-label="Keyboard shortcuts"></dialog>
+<div id="toast" role="status"></div>
+<script>
+// Worklog 内核：模型、解析、正规化、序列化、块操作、内存索引。无依赖，可在 Node 中测试。
+const ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+const ID_RE = '[A-Za-z0-9_-]{10}';
+const DATE_RE = '\\d{4}-\\d{2}-\\d{2}';
+const SCHEMA = '0.3';
+let keySeq = 0;
+
+function randomId() {
+  const a = new Uint8Array(10);
+  crypto.getRandomValues(a);
+  let s = '';
+  for (let i = 0; i < 10; i++) s += ID_CHARS[a[i] & 63];
+  return s;
+}
+
+// type: ord 普通记录 | proj 项目声明 | branch 分支声明 | head 项目标题块 | raw 无法识别的行（原样保留）
+function mk(props) {
+  return Object.assign({
+    key: 'b' + (++keySeq), id: null, type: 'ord', date: null, status: null, statusDate: null,
+    text: '', owner: null, proj: null, extParent: null, del: null, life: null, children: []
+  }, props);
+}
+
+function newState() { return { pages: {}, ids: new Set(), ver: 0, pdiags: {}, diags: [] }; }
+function bump(S) { S.ver++; }
+
+function walk(list, fn, parent = null, depth = 0) {
+  for (const b of list.slice()) { fn(b, parent, depth, list); walk(b.children, fn, b, depth + 1); }
+}
+function eachBlock(S, fn) { for (const d in S.pages) walk(S.pages[d], (b, parent) => fn(b, parent, d)); }
+
+function find(S, key) {
+  let hit = null;
+  const search = (list, parent, page) => {
+    for (let i = 0; i < list.length && !hit; i++) {
+      if (list[i].key === key) { hit = { b: list[i], parent, list, index: i, page }; return; }
+      search(list[i].children, list[i], page);
+    }
+  };
+  for (const d in S.pages) { if (hit) break; search(S.pages[d], null, d); }
+  return hit;
+}
+
+function flat(S, page) { const out = []; walk(S.pages[page] || [], (b) => out.push(b)); return out; }
+function hasContent(b) { return b.type === 'head' || b.type === 'raw' || b.text.trim() !== ''; }
+function newId(S) { let id; do { id = randomId(); } while (S.ids.has(id)); S.ids.add(id); return id; }
+function validDate(s) {
+  const [y, m, d] = s.split('-').map(Number), t = new Date(y, m - 1, d);
+  return t.getFullYear() === y && t.getMonth() === m - 1 && t.getDate() === d;
+}
+
+// ---- 内存索引：按版本号缓存，结构变化后首次使用时重建 ----
+const TAG_RE = /(?<![A-Za-z0-9\\])([@#])(?:\{([^}\n]+)\}|([A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*))/g;   // 名字中间允许点号：@Firstname.Lastname；句末的点不算
+const REF_RE = new RegExp(`\\[\\[PJ\\/[^\\]|\\[]+\\|(${ID_RE})\\]\\]|\\(\\((${ID_RE})\\)\\)`, 'g');
+let cache = { S: null, ver: -1 };
+function index(S) {
+  if (cache.S === S && cache.ver === S.ver) return cache;
+  const P = {}, byId = {}, tags = new Map(), refs = new Map(), byProj = new Map();
+  const add = (map, k, v) => { let a = map.get(k); if (!a) map.set(k, a = []); a.push(v); };
+  const go = (list, ctx, page) => {
+    for (const b of list) {
+      b.page = page;
+      if (b.type === 'raw') { go(b.children, ctx, page); continue; }
+      if (b.id) byId[b.id] = b;
+      if (b.type === 'proj' || b.type === 'branch') { if (b.id) P[b.id] = { id: b.id, name: b.text, type: b.type, parent: b.owner, life: b.life, date: b.date }; }
+      else if (b.type === 'ord') {
+        b.own = ctx;   // 推导出的归属，随索引一起刷新
+        if (b.id) {
+          add(byProj, ctx, b);
+          let m;
+          TAG_RE.lastIndex = 0;
+          while ((m = TAG_RE.exec(b.text))) add(tags, m[1] + (m[2] || m[3]), b.id);
+          REF_RE.lastIndex = 0;
+          while ((m = REF_RE.exec(b.text))) add(refs, m[1] || m[2], b.id);
+          if (b.extParent) add(refs, b.extParent, b.id);
+        }
+      }
+      go(b.children, childCtx(b, ctx), page);
+    }
+  };
+  for (const d in S.pages) go(S.pages[d], 'INBOX', d);
+  return (cache = { S, ver: S.ver, P, byId, tags, refs, byProj });
+}
+function projects(S) { return index(S).P; }
+function recordsByTag(S, tag) { const ix = index(S); return (ix.tags.get(tag) || []).map((id) => ix.byId[id]); }
+function referenced(S, id) { return !!id && (index(S).refs.get(id) || []).some((x) => x !== id); }
+
+function projectPath(P, id) {
+  const parts = []; let cur = P[id], guard = 0;
+  while (cur && guard++ < 20) { parts.unshift(cur.name); cur = cur.type === 'branch' ? P[cur.parent] : null; }
+  return parts.join(' / ');
+}
+function normName(s) { return s.normalize('NFC').trim().replace(/\s+/g, ' ').replace(/[A-Z]/g, (c) => c.toLowerCase()); }
+function matchProjects(S, name) { const n = normName(name); return Object.values(projects(S)).filter((p) => normName(p.name) === n); }
+
+// 归属由缩进推导：声明块和项目标题块为其下的记录提供项目，普通块沿用上层，顶层为 Inbox
+function childCtx(b, ctx) { return b.type === 'head' ? b.proj : (b.type === 'ord' || b.type === 'raw' ? ctx : b.id); }
+function ownerAt(S, key) {
+  let found = 'INBOX';
+  const go = (list, ctx) => { for (const b of list) { if (b.key === key) { found = ctx; return true; } if (go(b.children, childCtx(b, ctx))) return true; } return false; };
+  for (const d in S.pages) if (go(S.pages[d], 'INBOX')) break;
+  return found;
+}
+
+// ---- 正规化 ----
+const RE_ST = new RegExp(`^\\[(TODO|WAIT|DONE)(?::(${DATE_RE}))?\\]\\s*`);
+const RE_ST_END = new RegExp(`\\s*\\[(TODO|WAIT|DONE)(?::(${DATE_RE}))?\\]$`);
+const RE_PURE = new RegExp(`^\\[\\[PJ\\/[^\\]|\\[]+\\|(${ID_RE})\\]\\]$`);
+
+function normalizeRefs(S, text) {
+  if (text.indexOf('[[') < 0) return text;
+  return text.replace(/\[\[([^\[\]|]+)\]\]/g, (all, inner) => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(inner)) return all;
+    const hits = matchProjects(S, inner.replace(/^PJ\//, ''));
+    return hits.length === 1 ? `[[PJ/${hits[0].name}|${hits[0].id}]]` : all;
+  });
+}
+
+// 失焦或结构操作前调用：只移动和补全字段，不改写正文
+function commitBlock(S, b, today) {
+  if (b.type === 'head' || b.type === 'raw') return;
+  const before = b.text + '|' + b.status + '|' + b.type;
+  if (b.type !== 'ord') b.text = b.text.replace(/[|\[\]\n]/g, '').normalize('NFC').trim();
+  else {
+    let t = b.text.replace(/^\n+/, '').replace(/\s+$/, '');
+    const head = t.match(RE_ST), tail = head ? null : t.match(RE_ST_END);
+    if (head) { b.status = head[1]; b.statusDate = head[2] && validDate(head[2]) ? head[2] : today; t = t.slice(head[0].length); }
+    else if (tail) { b.status = tail[1]; b.statusDate = tail[2] && validDate(tail[2]) ? tail[2] : today; t = t.slice(0, t.length - tail[0].length); }
+    b.text = normalizeRefs(S, t);
+    const pure = b.text.match(RE_PURE);
+    if (pure && !b.status && projects(S)[pure[1]]) { b.type = 'head'; b.proj = pure[1]; b.text = ''; }
+  }
+  if (before !== b.text + '|' + b.status + '|' + b.type) bump(S);
+}
+
+// 给当前页补 ID 和状态日期；有了非标题的上层记录后不再保留跨文件父记录
+function ensureIds(S, today, date) {
+  const fix = (list, logical) => {
+    for (const b of list) {
+      if (b.type === 'raw') { fix(b.children, logical); continue; }
+      if (!b.id && hasContent(b)) { b.id = newId(S); bump(S); }
+      if (b.status && !b.statusDate) b.statusDate = today;
+      if (logical && b.extParent) b.extParent = null;
+      fix(b.children, b.type === 'head' ? logical : (b.id && hasContent(b) ? b : logical));
+    }
+  };
+  fix(S.pages[date] || [], null);
+}
+
+function serializePage(S, date) {
+  const lines = ['<!-- worklog-schema: ' + SCHEMA + ' -->', '# Journal ' + date, ''], P = projects(S);
+  // parentId 是逻辑父记录：项目标题块对父子关系透明
+  const emit = (list, depth, parentId, ctx) => {
+    for (const b of list) {
+      if (b.type === 'raw') { lines.push(b.text); emit(b.children, depth + 1, parentId, ctx); continue; }
+      if (!hasContent(b) || !b.id) { emit(b.children, depth, parentId, ctx); continue; }
+      const ind = '  '.repeat(depth);
+      let payload, cont = b.note ? b.note.split('\n') : [], own = ctx;
+      if (b.type === 'proj') { payload = `[[PJ/${b.text}]] Project created.` + (b.life ? ` [ARCHIVED:${b.life}]` : ''); own = null; }
+      else if (b.type === 'branch') { payload = `[[PJ/${b.text}]] Branch created.` + (b.life ? ` [COMPLETED:${b.life}]` : ''); own = b.owner; }
+      else if (b.type === 'head') { payload = `[[PJ/${P[b.proj] ? P[b.proj].name : (b.label || 'unknown')}|${b.proj}]]`; own = b.proj; }
+      else {
+        const parts = b.text.split('\n');
+        payload = (b.status ? `[${b.status}:${b.statusDate}] ` : '') + parts[0];
+        cont = parts.slice(1);
+        if (b.conflict) own = b.conflict;   // 归属冲突未解决前保留文件里原有的标记
+      }
+      let line = `${ind}- ${b.date} ${payload} ((${b.id}))`;
+      if (own) line += own === 'INBOX' ? ' ^pj(INBOX)' : ` ^pj((${own}))`;
+      const pr = parentId || b.extParent;
+      if (pr) line += ` ^pr((${pr}))`;
+      if (b.del) line += ` ^del(${b.del})`;
+      lines.push(line);
+      for (const c of cont) lines.push(ind + '  |' + (c ? ' ' + c : ''));
+      emit(b.children, depth + 1, b.type === 'head' ? parentId : b.id, childCtx(b, ctx));
+    }
+  };
+  emit(S.pages[date] || [], 0, null, 'INBOX');
+  return lines.join('\n') + '\n';
+}
+
+// ---- 解析 ----
+const RE_TAIL = new RegExp(`^(.*) \\(\\((${ID_RE})\\)\\)((?:\\s+\\^[a-z]+\\(\\S*\\))*)\\s*$`);
+const RE_LEAD_DATE = new RegExp(`^(${DATE_RE})\\s+(.*)$`);
+const RE_DECL = new RegExp(`^\\[\\[PJ\\/([^\\[\\]|]+)\\]\\] (Project|Branch) created\\.(?: \\[(ARCHIVED|COMPLETED):(${DATE_RE})\\])?$`);
+const RE_HEAD = new RegExp(`^\\[\\[PJ\\/([^\\[\\]|]+)\\|(${ID_RE})\\]\\]$`);
+const RE_PJ = new RegExp(`^\\^pj\\(\\((${ID_RE})\\)\\)$`);
+const RE_PR = new RegExp(`^\\^pr\\(\\((${ID_RE})\\)\\)$`);
+const RE_DEL = new RegExp(`^\\^del\\((${DATE_RE})\\)$`);
+
+function parseHeader(S, str, date, today, out, line) {
+  const bad = (msg) => { out.diags.push({ line, level: 'error', msg }); return null; };
+  const takeStatus = (o, m) => { o.status = m[1]; if (m[2] && validDate(m[2])) o.statusDate = m[2]; else { o.statusDate = today; out.needsWrite = true; } };
+  const m = str.match(RE_TAIL);
+  if (m) {   // 已有 ID 的规范行
+    let stored = null, pr = null, del = null, x;
+    for (const t of m[3].trim().split(/\s+/)) {
+      if (!t) continue;
+      if ((x = t.match(RE_PJ))) stored = x[1];
+      else if (t === '^pj(INBOX)') stored = 'INBOX';
+      else if ((x = t.match(RE_PR))) pr = x[1];
+      else if ((x = t.match(RE_DEL)) && validDate(x[1])) del = x[1];
+      else return bad('Unrecognized metadata ' + t);
+    }
+    const d = m[1].match(RE_LEAD_DATE);
+    if (!d || !validDate(d[1])) return bad('The record has no valid date');
+    const base = { id: m[2], date: d[1], extParent: pr, fresh: true };
+    let head = d[2];
+    S.ids.add(m[2]);
+    if ((x = head.match(RE_DECL))) {
+      if (x[2] === 'Project') return mk({ ...base, type: 'proj', text: x[1].trim(), life: x[3] === 'ARCHIVED' ? x[4] : null });
+      return mk({ ...base, type: 'branch', text: x[1].trim(), owner: stored && stored !== 'INBOX' ? stored : null, life: x[3] === 'COMPLETED' ? x[4] : null });
+    }
+    if ((x = head.match(RE_HEAD))) return mk({ ...base, type: 'head', proj: x[2], label: x[1] });
+    const o = { ...base, stored, del };
+    if ((x = head.match(RE_ST))) { takeStatus(o, x); head = head.slice(x[0].length); }
+    if (!head.trim()) return bad('The record has no text');
+    o.text = head;
+    return mk(o);
+  }
+  // 没有 ID：待正规化的手写行
+  out.needsWrite = true;
+  const o = { date, pending: true, fresh: true };
+  let rest = str, x = rest.match(RE_LEAD_DATE);
+  if (x && validDate(x[1])) { o.date = x[1]; rest = x[2]; }
+  if ((x = rest.match(RE_DECL))) return mk({ ...o, type: x[2] === 'Project' ? 'proj' : 'branch', text: x[1].trim() });
+  if ((x = rest.match(RE_ST))) { takeStatus(o, x); rest = rest.slice(x[0].length); }
+  else if ((x = rest.match(RE_ST_END))) { takeStatus(o, x); rest = rest.slice(0, rest.length - x[0].length); }
+  if (!rest.trim()) return bad('The record has no text');
+  o.text = rest;
+  return mk(o);
+}
+
+function parseFile(S, text, date, today) {
+  const out = { blocks: [], diags: [], needsWrite: false, unsupported: null };
+  const lines = text.replace(/\r/g, '').split('\n');
+  let i = 0;
+  const v = lines[0] && lines[0].match(/^<!-- worklog-schema: ([\d.]+) -->\s*$/);
+  if (v) { if (parseFloat(v[1]) > parseFloat(SCHEMA)) { out.unsupported = v[1]; return out; } i = 1; }
+  else if (text.trim()) out.needsWrite = true;
+  if (lines[i] && lines[i].startsWith('# ')) i++;
+  const stack = [];
+  let last = null, lastLevel = -1;
+  for (; i < lines.length; i++) {
+    const raw = lines[i];
+    if (!raw.trim()) continue;
+    let level = 0, spaces = 0, k = 0;
+    for (; k < raw.length; k++) { const c = raw.charCodeAt(k); if (c === 9) level++; else if (c === 32) spaces++; else break; }
+    if (level || spaces % 2) out.needsWrite = true;
+    level += spaces >> 1;
+    const rest = raw.slice(k);
+    if (last && level > lastLevel && !rest.startsWith('- ')) {   // 续行
+      let piece;
+      if (rest === '|') piece = ''; else if (rest.startsWith('| ')) piece = rest.slice(2); else { piece = rest; out.needsWrite = true; }
+      if (last.type === 'ord') last.text += '\n' + piece; else last.note = last.note == null ? piece : last.note + '\n' + piece;
+      continue;
+    }
+    while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
+    const sibs = stack.length ? stack[stack.length - 1].block.children : out.blocks;
+    if (!rest.startsWith('- ')) {
+      sibs.push(mk({ type: 'raw', text: raw, date }));
+      out.diags.push({ line: i + 1, level: 'warn', msg: 'Unrecognized line, kept as it is' });
+      last = null; continue;
+    }
+    let b = parseHeader(S, rest.slice(2).trim(), date, today, out, i + 1);
+    if (!b) { b = mk({ type: 'raw', text: raw, date, err: true }); last = null; } else { last = b; lastLevel = level; }
+    sibs.push(b);
+    stack.push({ level, block: b });
+  }
+  return out;
+}
+
+// 全部文件解析完后调用：补全手写行、推导关系、生成诊断
+function settle(S, today) {
+  const diags = [];
+  eachBlock(S, (b) => { b.dup = false; if (b.pending && b.type !== 'ord' && !b.id) b.id = newId(S); });
+  bump(S);
+  eachBlock(S, (b) => { if (b.pending && b.type === 'ord') { b.text = normalizeRefs(S, b.text); const p = b.text.match(RE_PURE); if (p && !b.status) { b.type = 'head'; b.proj = p[1]; b.text = ''; } } });
+  const seen = new Map();
+  const pass = (list, logical, ctx, date) => {
+    for (const b of list) {
+      if (b.type === 'raw') { if (b.err) diags.push({ date, key: b.key, level: 'error', msg: 'This record could not be parsed, kept as it is' }); pass(b.children, logical, ctx, date); continue; }
+      if (b.type === 'branch' && b.pending) b.owner = ctx === 'INBOX' ? null : ctx;
+      if (!b.id && hasContent(b)) b.id = newId(S);
+      if (b.id) { const o = seen.get(b.id); if (o) { o.dup = b.dup = true; } else seen.set(b.id, b); }
+      if (logical) { if (b.fresh && b.extParent && b.extParent !== logical.id) diags.push({ date, key: b.key, level: 'warn', msg: 'Parent mark disagreed with the indentation; corrected to follow the indentation' }); b.extParent = null; }
+      if (b.type === 'ord' && b.fresh && !b.pending && b.stored && b.stored !== ctx) b.conflict = b.stored;
+      b.pending = false; b.fresh = false; b.stored = undefined;
+      pass(b.children, b.type === 'head' ? logical : (b.id ? b : logical), childCtx(b, ctx), date);
+    }
+  };
+  for (const d in S.pages) pass(S.pages[d], null, 'INBOX', d);
+  bump(S);
+  const { P, byId } = index(S);
+  eachBlock(S, (b, parent, date) => {
+    const push = (level, msg) => diags.push({ date, key: b.key, level, msg });
+    if (b.dup) push('block', 'Duplicate record ID: ' + b.id);
+    if (b.conflict) push('warn', 'Ownership conflict: the mark in the file disagrees with the indentation');
+    if (b.type === 'head' && !P[b.proj]) push('error', 'Project heading points to a project that does not exist');
+    if (b.type === 'branch' && !P[b.owner]) push('error', 'Branch has no valid parent project');
+    if (b.extParent && !byId[b.extParent]) push('warn', 'Parent mark points to a record that does not exist');
+  });
+  for (const d in S.pdiags) for (const x of S.pdiags[d]) diags.push({ date: d, line: x.line, level: x.level, msg: x.msg });
+  S.diags = diags;
+  return diags;
+}
+
+function loadPage(S, date, text, today) {
+  const r = parseFile(S, text, date, today);
+  if (r.unsupported) { S.pages[date] = []; S.pdiags[date] = [{ level: 'block', msg: 'File uses schema version ' + r.unsupported + ', newer than this app supports; not loaded' }]; return { needsWrite: false, unsupported: true }; }
+  S.pages[date] = r.blocks; S.pdiags[date] = r.diags;
+  bump(S);
+  return r;
+}
+
+// ---- 块操作 ----
+function indent(S, key) {
+  const loc = find(S, key);
+  if (!loc || loc.index === 0) return false;
+  const prev = loc.list[loc.index - 1];
+  if (prev.type === 'raw') return false;
+  loc.list.splice(loc.index, 1);
+  prev.children.push(loc.b);
+  bump(S); return true;
+}
+
+function outdent(S, key) {
+  const loc = find(S, key);
+  if (!loc || !loc.parent) return false;
+  const ploc = find(S, loc.parent.key);
+  loc.list.splice(loc.index, 1);
+  ploc.list.splice(ploc.index + 1, 0, loc.b);
+  loc.b.extParent = null;
+  bump(S); return true;
+}
+
+function move(S, key, dir) {
+  const loc = find(S, key), j = loc ? loc.index + dir : -1;
+  if (!loc || j < 0 || j >= loc.list.length) return false;
+  loc.list.splice(loc.index, 1);
+  loc.list.splice(j, 0, loc.b);
+  bump(S); return true;
+}
+
+function newAfter(S, key) {
+  const loc = find(S, key), nb = mk({ date: loc.page });
+  if (loc.b.children.length || (loc.b.type !== 'ord' && loc.b.type !== 'raw')) loc.b.children.unshift(nb);
+  else loc.list.splice(loc.index + 1, 0, nb);
+  return nb;
+}
+
+function newBefore(S, key) {
+  const loc = find(S, key), nb = mk({ date: loc.page });
+  loc.list.splice(loc.index, 0, nb); return nb;
+}
+
+function split(S, key, pos) {
+  const loc = find(S, key), b = loc.b;
+  const nb = mk({ date: b.date, text: b.text.slice(pos).replace(/^\s+/, '') });
+  b.text = b.text.slice(0, pos).replace(/\s+$/, '');
+  loc.list.splice(loc.index + 1, 0, nb);
+  bump(S); return nb;
+}
+
+function removeBlock(S, key) { const loc = find(S, key); loc.list.splice(loc.index, 1); bump(S); }
+
+function mergeUp(S, key) {
+  const loc = find(S, key), b = loc.b, order = flat(S, loc.page);
+  const prev = order[order.indexOf(b) - 1];
+  if (!prev) return { ok: false, msg: '' };
+  if (prev.type === 'ord' && !hasContent(prev) && !prev.id && !prev.children.length) { removeBlock(S, prev.key); return { ok: true, focus: b.key, pos: 0 }; }
+  if (b.type !== 'ord' || prev.type !== 'ord') return { ok: false, msg: 'Project lines and headings cannot be merged' };
+  if (b.children.length) return { ok: false, msg: 'This block has children and cannot be merged into the one above' };
+  if (b.status) return { ok: false, msg: 'This block has a status and cannot be merged into the one above' };
+  if (b.del || prev.del) return { ok: false, msg: 'Deleted blocks cannot be merged' };
+  if (referenced(S, b.id)) return { ok: false, msg: 'Other records refer to this block, so it cannot be merged into the one above' };
+  const pos = prev.text.length;
+  prev.text += b.text;
+  removeBlock(S, key);
+  return { ok: true, focus: prev.key, pos };
+}
+
+function deleteBlock(S, key, today) {
+  const { b } = find(S, key);
+  if (b.type === 'raw') return { ok: false, msg: 'Fix unrecognized lines in a text editor' };
+  if (b.children.length) return { ok: false, msg: 'This block has children. Move or delete them first' };
+  if (!b.id || b.type === 'head') { removeBlock(S, key); return { ok: true }; }
+  if (b.type !== 'ord') {
+    let used = false;
+    eachBlock(S, (x) => { if (x.owner === b.id || x.proj === b.id) used = true; });
+    if (used) return { ok: false, msg: 'The project still has records or branches, so it cannot be deleted' };
+    removeBlock(S, key); return { ok: true };
+  }
+  if (referenced(S, b.id)) { b.del = today; bump(S); return { ok: true, soft: true, msg: 'Other records refer to this one, so it was marked deleted instead of removed' }; }
+  removeBlock(S, key); return { ok: true };
+}
+
+function cycleStatus(S, key, today) {
+  const { b } = find(S, key);
+  if (b.type !== 'ord') return false;
+  const order = [null, 'TODO', 'WAIT', 'DONE'];
+  b.status = order[(order.indexOf(b.status) + 1) % order.length];
+  b.statusDate = b.status ? today : null;
+  bump(S); return true;
+}
+
+// 在当前位置插入声明块，当前块成为它的第一个子块
+function createProject(S, key, name, kind, parentProj) {
+  const loc = find(S, key);
+  const decl = mk({ type: kind, text: name.normalize('NFC').trim(), id: newId(S), date: loc.page, owner: kind === 'branch' ? parentProj : null });
+  loc.list.splice(loc.index, 1, decl);
+  decl.children = [loc.b];
+  bump(S); return decl;
+}
+
+// 归入项目：上一个同级块已是该项目的标题就移到它下面，否则在当前位置插入标题块
+function wrapInProject(S, key, projId) {
+  if (ownerAt(S, key) === projId) return { ok: false, msg: 'This block already belongs to that project' };
+  const loc = find(S, key), prev = loc.list[loc.index - 1];
+  if (prev && prev.type === 'head' && prev.proj === projId) { loc.list.splice(loc.index, 1); prev.children.push(loc.b); }
+  else { const head = mk({ type: 'head', proj: projId, date: loc.page }); loc.list.splice(loc.index, 1, head); head.children = [loc.b]; }
+  bump(S); return { ok: true };
+}
+
+// 解决归属冲突：按缩进，或按文件里的标记（插入对应项目的标题块）
+function resolveConflict(S, key, byMark) {
+  const { b } = find(S, key), target = b.conflict;
+  b.conflict = null; bump(S);
+  if (byMark && projects(S)[target]) wrapInProject(S, key, target);
+}
+
+// ---- 项目统计：总览、Working、归档都从这里取数；按版本号缓存 ----
+function daysBetween(a, b) {
+  const [y1, m1, d1] = a.split('-').map(Number), [y2, m2, d2] = b.split('-').map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+}
+let scache = { S: null, ver: -1, today: null };
+function stats(S, today) {
+  if (scache.S === S && scache.ver === S.ver && scache.today === today) return scache;
+  const ix = index(S), N = {}, open = [], inbox = [];
+  for (const id in ix.P) N[id] = { ...ix.P[id], kids: [], todo: 0, wait: 0, events: [] };
+  for (const id in N) { const p = N[id]; if (p.type === 'branch' && N[p.parent]) N[p.parent].kids.push(id); }
+  for (const [own, list] of ix.byProj) {
+    const n = N[own];
+    for (const b of list) {
+      if (b.del) continue;
+      if (own === 'INBOX') inbox.push(b);
+      if (b.status === 'TODO' || b.status === 'WAIT') { open.push(b); if (n) { if (b.status === 'TODO') n.todo++; else n.wait++; } }
+      else if (!b.status && n) n.events.push(b);
+    }
+  }
+  const cmp = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const roll = (id, closedAbove, depth) => {
+    const p = N[id];
+    p.closed = closedAbove || !!p.life;
+    p.events.sort(cmp); p.kids.sort((a, b) => cmp(N[a], N[b]));
+    p.subTodo = p.todo; p.subWait = p.wait; p.subEvents = p.events.length;
+    if (depth < 30) for (const k of p.kids) { roll(k, p.closed, depth + 1); p.subTodo += N[k].subTodo; p.subWait += N[k].subWait; p.subEvents += N[k].subEvents; }
+    p.status = p.life ? (p.type === 'proj' ? 'archived' : 'completed') : (p.subTodo + p.subWait ? 'ongoing' : 'ready');
+    p.days = daysBetween(p.date, p.life || today) + 1;
+  };
+  const tops = [];
+  for (const id in N) if (N[id].type === 'proj') { roll(id, false, 0); tops.push(id); }
+  for (const id in N) if (N[id].closed === undefined) roll(id, false, 0);
+  tops.sort((a, b) => cmp(N[a], N[b]));
+  return (scache = { S, ver: S.ver, today, N, tops, open, inbox });
+}
+
+// 完成或重新打开分支、归档或恢复顶级项目：只改声明记录这一行
+function setLife(S, id, today) {
+  const st = stats(S, today), p = st.N[id], b = index(S).byId[id];
+  if (!p || !b) return { ok: false, msg: '' };
+  if (b.life) {
+    const par = p.type === 'branch' ? st.N[p.parent] : null;
+    if (par && par.closed) return { ok: false, msg: 'The parent project is closed. Reopen it first' };
+    b.life = null;
+  } else {
+    const n = p.subTodo + p.subWait;
+    if (n) return { ok: false, msg: `${n} open TODO or WAIT ${n === 1 ? 'item' : 'items'} left. Close them first` };
+    b.life = today;
+  }
+  bump(S);
+  return { ok: true, page: b.page };
+}
+
+if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate };
+
+// 本地目录读写层：File System Access API。window.__mockDir 存在时用它代替真实目录（测试用）。
+const FS = {
+  dir: null, data: null, files: new Map(),   // date → { handle, mtime, size }
+
+  supported() { return 'showDirectoryPicker' in window || !!window.__mockDir; },
+
+  idb(mode, fn) {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open('worklog', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('kv');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const tx = open.result.transaction('kv', mode), req = fn(tx.objectStore('kv'));
+        tx.oncomplete = () => resolve(req && req.result);
+        tx.onerror = () => reject(tx.error);
+      };
+    });
+  },
+
+  // 返回 'ready' | 'prompt'（已记住目录但需要点一下授权）| 'none'
+  async restore() {
+    if (window.__mockDir) { this.dir = window.__mockDir; return 'ready'; }
+    try { this.dir = await this.idb('readonly', (s) => s.get('dir')); } catch (e) { this.dir = null; }
+    if (!this.dir) return 'none';
+    return (await this.dir.queryPermission({ mode: 'readwrite' })) === 'granted' ? 'ready' : 'prompt';
+  },
+  async grant() { return (await this.dir.requestPermission({ mode: 'readwrite' })) === 'granted'; },
+  async pick() {
+    this.dir = await window.showDirectoryPicker({ mode: 'readwrite', id: 'worklog' });
+    try { await this.idb('readwrite', (s) => s.put(this.dir, 'dir')); } catch (e) { /* 记不住也能用，下次重新选择 */ }
+  },
+
+  // 决定记录放在哪里，让"选了外层文件夹"和"直接选了 data"得到同一个结果，不再出现 data/data：
+  //   1. 选中的文件夹里已有 data 子文件夹 → 用它
+  //   2. 选中的文件夹本身叫 data，或里面直接放着日期文件 → 就用它本身
+  //   3. 其他情况 → 在里面新建 data
+  async locate() {
+    const d = this.dir;
+    let sub = null;
+    try { sub = await d.getDirectoryHandle('data'); } catch (e) { /* 没有这个子文件夹 */ }
+    if (!sub) {
+      let own = d.name === 'data';
+      if (!own && d.entries) for await (const [name, h] of d.entries()) if (h.kind === 'file' && /^\d{4}-\d{2}-\d{2}\.md$/.test(name)) { own = true; break; }
+      if (!own) sub = await d.getDirectoryHandle('data', { create: true });
+    }
+    this.data = sub || d;
+    this.where = sub ? d.name + '/data' : d.name;
+  },
+
+  // 读入 data/ 下全部日期文件，返回 [[date, text], …]
+  async loadAll() {
+    await this.locate();
+    this.files.clear();
+    const jobs = [];
+    for await (const [name, handle] of this.data.entries()) {
+      const m = handle.kind === 'file' && name.match(/^(\d{4}-\d{2}-\d{2})\.md$/);
+      if (m) jobs.push(handle.getFile().then(async (f) => { this.files.set(m[1], { handle, mtime: f.lastModified, size: f.size }); return [m[1], await f.text()]; }));
+    }
+    return Promise.all(jobs);
+  },
+
+  // 磁盘上的文件自上次读写后是否被改过
+  async changed(date) {
+    const e = this.files.get(date);
+    if (!e) return false;
+    const f = await e.handle.getFile();
+    return f.lastModified !== e.mtime || f.size !== e.size;
+  },
+  async read(date) {
+    const e = this.files.get(date), f = await e.handle.getFile();
+    e.mtime = f.lastModified; e.size = f.size;
+    return f.text();
+  },
+  async write(date, text) {
+    let e = this.files.get(date);
+    if (!e) this.files.set(date, e = { handle: await this.data.getFileHandle(date + '.md', { create: true }), mtime: 0, size: 0 });
+    const w = await e.handle.createWritable();   // 写入临时文件，close 时整体替换
+    await w.write(text); await w.close();
+    const f = await e.handle.getFile();
+    e.mtime = f.lastModified; e.size = f.size;
+  },
+  age(date) { const e = this.files.get(date); return e ? Date.now() - e.mtime : Infinity; }
+};
+
+// Worklog 界面：Journal 块编辑器，接内核与本地目录。
+const $ = (s) => document.querySelector(s);
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+const pad = (n) => String(n).padStart(2, '0');
+const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = () => fmt(new Date());
+const shiftDay = (s, n) => { const [y, m, d] = s.split('-').map(Number); return fmt(new Date(y, m - 1, d + n)); };
+const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+let S = newState(), cur = today(), readOnly = false, rendering = false, ac = null, origin = null;
+let showSide = false, prevLines = new Set(), view = 'journal', viewArg = null;
+const APP_VERSION = '0.3';
+// 主题机制：一个主题就是 style.css 里一组 :root[data-theme=x] 变量；在这里登记名字即可出现在 Settings
+const THEMES = { light: 'Light', dark: 'Dark' };
+const cfg = { chip: 'date', theme: 'system', nav: 'wide', stale: 7, fold: {}, lifeline: 'text', graphOpen: null, color: 'full' };
+try { Object.assign(cfg, JSON.parse(localStorage.getItem('worklog-cfg') || '{}')); } catch (e) { /* 忽略 */ }
+function saveCfg() { try { localStorage.setItem('worklog-cfg', JSON.stringify(cfg)); } catch (e) { /* 忽略 */ } applyTheme(); }
+const darkMq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+function applyTheme() { document.documentElement.dataset.color = cfg.color; document.documentElement.dataset.theme = THEMES[cfg.theme] ? cfg.theme : (darkMq && darkMq.matches ? 'dark' : 'light'); }
+if (darkMq) darkMq.addEventListener('change', applyTheme);
+applyTheme();
+const dirty = new Set(), force = new Set();
+let navCur = null, navIdx = null;   // 键盘导航的焦点：Journal 记块的 key，列表页记第几条
+let saveTimer = null, saving = Promise.resolve(), loadInfo = '';
+let workspaceLock = null, openingWorkspace = false;
+
+function toast(msg) {
+  if (!msg) return;
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function banner(msg, actions) {
+  const b = $('#banner'); b.textContent = '';
+  if (!msg) { b.hidden = true; return; }
+  b.appendChild(el('span', null, msg));
+  for (const [label, fn] of actions || []) { const x = el('button', 'btn', label); x.onclick = fn; b.appendChild(x); }
+  b.hidden = false;
+}
+
+// ---- 保存：只写发生变化的那一个日期文件，写前校验磁盘上是否被改过 ----
+function touch(immediate, date) {
+  if (readOnly) return;
+  dirty.add(date || cur);
+  $('#saved').textContent = 'editing';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flush, immediate ? 0 : 400);
+  if (showSide) updateSide();
+}
+function flush() {
+  saving = saving.then(async () => {
+    for (const date of [...dirty]) {
+      try {
+        ensureIds(S, today(), date);
+        const text = serializePage(S, date);
+        if (!FS.files.has(date) && !(S.pages[date] || []).some(hasContent)) { dirty.delete(date); continue; }
+        if (!force.has(date) && await FS.changed(date)) { conflict(date); continue; }
+        await FS.write(date, text);
+        dirty.delete(date); force.delete(date);
+      } catch (e) { banner('Save failed: ' + e.message + '. Your edits are still in the editor.', [['Retry', () => { banner(); flush(); }]]); return; }
+    }
+    if (!dirty.size) { const d = new Date(); $('#saved').textContent = `saved ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+    if (showSide) updateSide();
+  });
+  return saving;
+}
+function conflict(date) {
+  banner(`data/${date}.md was changed outside the app while you have unsaved edits.`, [
+    ['Load disk version', async () => { banner(); dirty.delete(date); await reloadPage(date); }],
+    ['Keep mine', () => { banner(); force.add(date); flush(); }]
+  ]);
+}
+async function reloadPage(date) {
+  loadPage(S, date, await FS.read(date), today());
+  settle(S, today());
+  if (view !== 'journal') drawView(); else if (date === cur) render();
+  updateIssues();
+}
+
+// ---- 正文渲染 ----
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const TOKEN = new RegExp(`(\\\\[@#\\[(^\\\\])|\\[\\[PJ\\/([^\\]|\\[]+)\\|(${ID_RE})\\]\\]|\\(\\((${ID_RE})\\)\\)|((?<![A-Za-z0-9])@(?:\\{[^}\\n]+\\}|[A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z0-9_-]+)*))|((?<![A-Za-z0-9])#(?:\\{[^}\\n]+\\}|[A-Za-z][A-Za-z0-9_-]*))`, 'g');
+function richLine(line, P, byId) {
+  let out = '', i = 0, m;
+  TOKEN.lastIndex = 0;
+  while ((m = TOKEN.exec(line))) {
+    out += esc(line.slice(i, m.index)); i = m.index + m[0].length;
+    if (m[1]) out += esc(m[1].slice(1));
+    else if (m[3]) out += `<span class="ref" data-pj="${m[3]}">${esc(P[m[3]] ? P[m[3]].name : m[2])}</span>`;
+    else if (m[4]) out += `<span class="ref rec">${esc(byId[m[4]] ? byId[m[4]].text.split('\n')[0].slice(0, 24) : 'unknown record')}</span>`;
+    else if (m[5]) out += `<span class="person">${esc(m[5].replace(/[{}]/g, ''))}</span>`;   // 花括号只是文件里的写法，显示时去掉
+    else if (m[6]) out += `<span class="kind">${esc(m[6].replace(/[{}]/g, ''))}</span>`;
+  }
+  return out + esc(line.slice(i));
+}
+function chipLabel(b) {
+  if (cfg.chip === 'none' || !b.statusDate) return b.status;
+  if (cfg.chip === 'date') return `${b.status} · ${b.statusDate.slice(5)}`;
+  const [y, m, d] = b.statusDate.split('-').map(Number), n = Math.round((new Date(new Date().toDateString()) - new Date(y, m - 1, d)) / 86400000);
+  return `${b.status} · ${n <= 0 ? 'today' : n + 'd'}`;
+}
+
+// ---- 渲染：只渲染当前页 ----
+function ensurePage() {
+  if (!S.pages[cur]) S.pages[cur] = [];
+  if (!S.pages[cur].length && !readOnly) S.pages[cur].push(mk({ date: cur }));
+}
+// 已结束项目里的记录只读
+function lockedBlock(b, st) {
+  const id = b.type === 'ord' ? b.own : b.type === 'head' ? b.proj : b.id;
+  return !!(id && st.N[id] && st.N[id].closed);
+}
+function render(focusKey, pos) {
+  if (view !== 'journal') return;
+  rendering = true; closeAc(); ensurePage();
+  const [y, m, d] = cur.split('-').map(Number);
+  $('#title').textContent = `${cur} ${WEEK[new Date(y, m - 1, d).getDay()]}`;
+  const ix = index(S), root = $('#editor');
+  ix.st = stats(S, today());
+  root.textContent = '';
+  const draw = (list, parent) => {
+    const wrap = el('div', parent ? 'kids' : 'list');
+    for (const b of list) {
+      const node = el('div', 'block'); node.dataset.key = b.key;
+      node.appendChild(drawRow(b, parent, ix));
+      if (b.children.length) node.appendChild(draw(b.children, b));
+      wrap.appendChild(node);
+    }
+    return wrap;
+  };
+  root.appendChild(draw(S.pages[cur], null));
+  rendering = false;
+  if (showSide) updateSide();
+  markCur();
+  if (focusKey) focusBlock(focusKey, pos);
+}
+
+function fillView(view, b, ix) {
+  if (b.type === 'raw') view.textContent = b.text;
+  else if (b.type === 'head') view.innerHTML = `<strong class="pjlink" data-pj="${b.proj}">${esc(ix.P[b.proj] ? projectPath(ix.P, b.proj) : (b.label || 'unknown project'))}</strong>`;
+  else if (b.type !== 'ord') view.innerHTML = `<strong>${esc(b.text)}</strong>`;
+  else if (!hasContent(b)) view.innerHTML = '<span class="ph">Type here. [[ for projects.</span>';
+  else view.innerHTML = b.text.split('\n').map((l, i) => `<div class="${i ? 'cont' : ''}">${richLine(l, ix.P, ix.byId) || '&nbsp;'}</div>`).join('');
+}
+
+function drawRow(b, parent, ix) {
+  const P = ix.P, locked = readOnly || lockedBlock(b, ix.st || (ix.st = stats(S, today())));
+  const row = el('div', 'row' + (b.del ? ' deleted' : '') + (b.type === 'raw' ? ' raw' : b.type !== 'ord' ? ' decl' : ''));
+  const bul = el('span', 'bullet' + (b.type === 'head' ? ' ring' : b.type === 'proj' || b.type === 'branch' ? ' square' : ''));
+  row.appendChild(bul);
+  if (b.type === 'ord' && b.status) {
+    const st = el('button', 'status ' + b.status, chipLabel(b));
+    st.title = `Edit status · ${b.status} since ${b.statusDate}`;
+    if (!b.del && !locked) st.onclick = () => editStatus(b, st);
+    row.appendChild(st);
+  }
+  const body = el('div', 'body'), view = el('div', 'view');
+  fillView(view, b, ix);
+  body.appendChild(view);
+  if (b.type !== 'raw') {
+    const ta = el('textarea'); ta.rows = 1; ta.spellcheck = false;
+    ta.value = b.type === 'head' ? (P[b.proj] ? projectPath(P, b.proj) : (b.label || 'unknown project')) : b.text;
+    ta.setAttribute('aria-label', b.type === 'head' ? 'Project heading' : b.type !== 'ord' ? 'Project name' : 'Record');
+    if (locked || b.del || b.dup || b.type === 'head') ta.readOnly = true;
+    view.onclick = (e) => { if (jump(e)) return; focusBlock(b.key, b.text.length); };
+    ta.onfocus = () => { row.classList.add('editing'); grow(ta); };
+    ta.onblur = (e) => onBlur(e, b, row, parent);
+    ta.oninput = (e) => { if (ta.readOnly) return; pairBrackets(ta, e); b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); };
+    ta.addEventListener('keydown', (e) => { if (!ta.readOnly && pairKeys(ta, e)) { b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); } });
+    ta.onkeydown = (e) => onKey(e, b, ta);
+    body.appendChild(ta);
+  }
+  row.appendChild(body);
+
+  if (b.type === 'proj') bul.title = `Project, created ${b.date}`;
+  if (b.type === 'head') bul.title = 'Project heading';
+  if (b.type === 'branch') {
+    const pname = P[b.owner] ? P[b.owner].name : 'unknown';
+    bul.title = `Branch of ${pname}, created ${b.date}`;
+    if (ownerAt(S, b.key) !== b.owner) row.appendChild(el('span', 'tag line', 'of ' + pname));
+  }
+  if (b.type === 'raw') row.appendChild(el('span', 'tag warn', b.err ? 'unparsed record' : 'unrecognized line'));
+  if (b.dup) row.appendChild(el('span', 'tag err', 'duplicate ID'));
+  if (b.conflict && !readOnly) {
+    row.appendChild(el('span', 'tag warn', 'owner conflict'));
+    const now = ownerAt(S, b.key), name = (id) => id === 'INBOX' ? 'Inbox' : (P[id] ? P[id].name : id);
+    const a = el('button', 'mini', 'Keep ' + name(now)); a.onclick = () => resolve(b, false); row.appendChild(a);
+    if (P[b.conflict]) { const c = el('button', 'mini', 'Move to ' + name(b.conflict)); c.onclick = () => resolve(b, true); row.appendChild(c); }
+  }
+  const lone = b.type === 'ord' && !b.status && !b.del ? b.text.trim().match(/^\[\[(?:PJ\/)?([^\[\]|]+)\]\]$/) : null;
+  if (lone && !/^\d{4}-\d{2}-\d{2}$/.test(lone[1]) && !readOnly) {
+    const own = ownerAt(S, b.key), name = lone[1].trim();
+    row.appendChild(el('span', 'muted', 'no such project'));
+    const make = (label, kind, ctx) => { const x = el('button', 'mini', label); x.onclick = () => { b.text = ''; createProject(S, b.key, name, kind, ctx); touch(true); render(b.key, 0); }; row.appendChild(x); };
+    if (own !== 'INBOX' && P[own]) make('New branch of ' + P[own].name, 'branch', own);
+    make('New project', 'proj', null);
+  }
+  if (b.type === 'ord' && !parent && hasContent(b)) row.appendChild(el('span', 'tag dash', 'Inbox'));
+  if (b.extParent) row.appendChild(el('span', 'tag line', '↳ ' + (ix.byId[b.extParent] ? ix.byId[b.extParent].text.split('\n')[0].slice(0, 16) : b.extParent)));
+  if (b.date !== cur) row.appendChild(el('span', 'tag line', b.date.slice(5)));
+  if (b.del) {
+    row.appendChild(el('span', 'tag warn', 'deleted ' + b.del.slice(5)));
+    if (!readOnly) { const un = el('button', 'mini', 'Restore'); un.onclick = () => { b.del = null; bump(S); touch(true); render(); }; row.appendChild(un); }
+  } else if (b.type !== 'raw' && !locked) {
+    const x = el('button', 'mini del', '×'); tip(x, 'Delete block');
+    x.onmousedown = (e) => e.preventDefault();
+    x.onclick = () => { const r = deleteBlock(S, b.key, today()); toast(r.msg); if (r.ok) { touch(true); render(); } };
+    row.appendChild(x);
+  }
+  return row;
+}
+
+function resolve(b, byMark) { resolveConflict(S, b.key, byMark); settle(S, today()); touch(true); render(); updateIssues(); }
+function grow(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+
+function focusBlock(key, pos) {
+  const node = document.querySelector(`.block[data-key="${key}"] > .row`), ta = node && node.querySelector('textarea');
+  if (!ta) return;
+  navCur = key; setCur(node);
+  node.classList.add('editing');
+  ta.focus(); grow(ta);
+  const p = pos == null ? ta.value.length : Math.min(pos, ta.value.length);
+  ta.setSelectionRange(p, p);
+}
+
+function onBlur(e, b, row, parent) {
+  if (rendering || !row.isConnected) return;
+  closeAc(); origin = null;
+  const v = S.ver;
+  if (!readOnly) commitBlock(S, b, today());
+  const ix = index(S);
+  if (e.relatedTarget && row.contains(e.relatedTarget)) { row.classList.remove('editing'); fillView(row.querySelector('.view'), b, ix); if (b.type === 'ord') row.querySelector('textarea').value = b.text; }
+  else { row.replaceWith(drawRow(b, parent, ix)); markCur(); }
+  if (v !== S.ver) touch(true);
+}
+
+// 快捷键循环切换：进入新状态写当天日期，切回本次编辑开始时的状态则恢复原日期
+function cycle(b) {
+  if (!origin || origin.key !== b.key) origin = { key: b.key, status: b.status, date: b.statusDate };
+  if (!cycleStatus(S, b.key, today())) return false;
+  if (b.status === origin.status) b.statusDate = origin.date;
+  return true;
+}
+
+// 点击状态标签：编辑 [TODO:2026-11-13] 这段原文
+function editStatus(b, chip) {
+  const inp = el('input', 'status-edit'); inp.value = `[${b.status}:${b.statusDate}]`; inp.setAttribute('aria-label', 'Status source'); inp.spellcheck = false;
+  let done = false;
+  const finish = (apply) => {
+    if (done) return; done = true;
+    if (apply) {
+      const v = inp.value.trim(), m = v.match(/^\[(TODO|WAIT|DONE)(?::(\d{4}-\d{2}-\d{2}))?\]$/);
+      if (v === '') { b.status = null; b.statusDate = null; }
+      else if (m && (!m[2] || validDate(m[2]))) { b.status = m[1]; b.statusDate = m[2] || today(); }
+      else toast('Use the form [TODO:2026-11-13] with TODO, WAIT or DONE. Nothing was changed');
+      origin = null; bump(S); touch(true);
+    }
+    render();
+  };
+  inp.onkeydown = (e) => { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); finish(true); } if (e.key === 'Escape') { e.preventDefault(); finish(false); } };
+  inp.onblur = () => finish(true);
+  chip.replaceWith(inp); inp.focus(); inp.select();
+}
+
+// ---- 键盘 ----
+function onKey(e, b, ta) {
+  if (e.isComposing || e.keyCode === 229) return;
+  if (ac && handleAcKey(e, b, ta)) return;
+  if (e.key === 'Escape') { e.preventDefault(); ta.blur(); return; }
+  const pos = ta.selectionStart, noSel = ta.selectionStart === ta.selectionEnd;
+  if (e.key === 'ArrowUp' && !e.altKey && !ta.value.slice(0, pos).includes('\n')) { if (hop(b, -1)) e.preventDefault(); return; }
+  if (e.key === 'ArrowDown' && !e.altKey && !ta.value.slice(pos).includes('\n')) { if (hop(b, 1)) e.preventDefault(); return; }
+  if (readOnly || lockedBlock(b, stats(S, today()))) return;
+  const mod = e.ctrlKey || e.metaKey;
+  const done = (key, p) => { e.preventDefault(); touch(true); render(key, p); };
+
+  if (e.key === 'Enter' && mod) { commitBlock(S, b, today()); if (cycle(b)) done(b.key, pos); else e.preventDefault(); return; }
+  if (e.key === 'Enter' && !e.shiftKey) {
+    const atEnd = pos >= b.text.length; commitBlock(S, b, today());
+    const p = atEnd ? b.text.length : Math.min(pos, b.text.length);
+    if (b.type !== 'ord' || p >= b.text.length) return done(newAfter(S, b.key).key, 0);
+    if (p === 0) { newBefore(S, b.key); return done(b.key, 0); }
+    return done(split(S, b.key, p).key, 0);
+  }
+  if (e.key === 'Tab') {
+    commitBlock(S, b, today());
+    const ok = e.shiftKey ? outdent(S, b.key) : indent(S, b.key);
+    if (!ok && !e.shiftKey) toast('There is no block above to indent under');
+    return done(b.key, pos);
+  }
+  if (e.key === 'Backspace' && (b.type === 'head' || (noSel && pos === 0))) {
+    const order = flat(S, cur).filter((x) => x.type !== 'raw'), i = order.indexOf(b);
+    if (!hasContent(b) || b.type === 'head') {
+      if (order.length === 1) { e.preventDefault(); return; }
+      const r = deleteBlock(S, b.key, today()); toast(r.msg);
+      if (r.ok && !r.soft) { const t = order[i - 1] || order[i + 1]; return done(t.key, null); }
+      e.preventDefault(); return;
+    }
+    const r = mergeUp(S, b.key); toast(r.msg);
+    if (r.ok) return done(r.focus, r.pos);
+    e.preventDefault(); return;
+  }
+  if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.altKey && e.shiftKey) { move(S, b.key, e.key === 'ArrowUp' ? -1 : 1); return done(b.key, pos); }
+}
+function hop(b, dir) {
+  const order = flat(S, cur).filter((x) => x.type !== 'raw'), t = order[order.indexOf(b) + dir];
+  if (t) focusBlock(t.key, dir < 0 ? null : 0);
+  return !!t;
+}
+
+// ---- [[ 项目补全 ----
+// 输入 [[ 自动补上 ]]，光标留在中间；紧接着手敲 ] 只是越过已有的 ]，删掉 [[ 时连同补上的 ]] 一起删
+function pairBrackets(ta, e) {
+  if (!e || e.inputType !== 'insertText' || e.data !== '[' || e.isComposing) return;
+  const p = ta.selectionStart, v = ta.value;
+  if (p !== ta.selectionEnd || v.slice(p - 2, p) !== '[[' || v[p - 3] === '[' || v.slice(p, p + 2) === ']]') return;
+  ta.value = v.slice(0, p) + ']]' + v.slice(p); ta.setSelectionRange(p, p);
+}
+function pairKeys(ta, e) {
+  const p = ta.selectionStart, v = ta.value;
+  if (p !== ta.selectionEnd || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return false;
+  if (e.key === ']' && v[p] === ']' && /\[\[[^\[\]\n]*\]?$/.test(v.slice(0, p))) { e.preventDefault(); ta.setSelectionRange(p + 1, p + 1); return true; }
+  if (e.key === 'Backspace' && v.slice(p - 2, p) === '[[' && v.slice(p, p + 2) === ']]') { e.preventDefault(); ta.value = v.slice(0, p - 1) + v.slice(p + 2); ta.setSelectionRange(p - 1, p - 1); return true; }
+  return false;
+}
+function checkAc(b, ta) {
+  const upto = ta.value.slice(0, ta.selectionStart);
+  const m = b.type === 'ord' ? upto.match(/\[\[([^\[\]\n|]*)(?:\]\])?$/) : null;
+  if (!m) return closeAc();
+  const start = upto.length - m[0].length, atStart = upto.slice(0, start).trim() === '';
+  const q = m[1].replace(/^PJ\//, '').trim(), P = projects(S), nq = normName(q), items = [];
+  const exact = Object.values(P).some((p) => normName(p.name) === nq);
+  const own = ownerAt(S, b.key), ctx = own !== 'INBOX' ? own : null;
+  const restEmpty = (ta.value.slice(0, start) + ta.value.slice(ta.selectionStart)).replace(/^\]\]/, '').trim() === '';
+  for (const p of Object.values(P)) {
+    const n = normName(p.name);
+    if (p.life || (nq && !n.includes(nq) && !nq.includes(n))) continue;
+    const act = !atStart ? 'ref' : restEmpty ? 'head' : 'wrap';
+    items.push({ act, id: p.id, title: projectPath(P, p.id), sub: { ref: 'Insert reference', head: 'Use as project heading', wrap: 'Move this block into the project' }[act] });
+  }
+  if (q && !exact && atStart) {
+    if (ctx && P[ctx]) items.push({ act: 'branch', ctx, title: `New branch of ${P[ctx].name}`, sub: q, create: true });
+    items.push({ act: 'proj', title: 'New project', sub: q, create: true });
+  }
+  if (!items.length) return closeAc();
+  ac = { key: b.key, start, items, sel: 0 };
+  drawAc(ta);
+}
+function drawAc(ta) {
+  const box = $('#ac'); box.textContent = '';
+  ac.items.forEach((it, i) => {
+    const btn = el('button', 'ac-item' + (i === ac.sel ? ' on' : '') + (it.create ? ' create' : ''));
+    btn.append(el('span', 'ac-title', it.title), el('span', 'ac-sub', it.sub));
+    btn.onmousedown = (e) => { e.preventDefault(); ac.sel = i; applyAc(ta); };
+    box.appendChild(btn);
+  });
+  const r = ta.getBoundingClientRect();
+  box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 400)) + 'px';
+  box.style.top = (r.bottom + 6) + 'px';
+  box.hidden = false;
+}
+// 悬停提示的统一写法：动作或状态，句首大写、不加句号；快捷键放在末尾括号里，多个键用 · 隔开
+function tip(node, text, keys) { node.title = keys ? `${text} (${keys})` : text; node.setAttribute('aria-label', text); return node; }
+function closeAc() { ac = null; const box = $('#ac'); if (box) box.hidden = true; }
+function handleAcKey(e, b, ta) {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); ac.sel = (ac.sel + (e.key === 'ArrowDown' ? 1 : ac.items.length - 1)) % ac.items.length; drawAc(ta); return true; }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); applyAc(ta); return true; }
+  if (e.key === 'Escape') { e.preventDefault(); closeAc(); return true; }
+  return false;
+}
+function applyAc(ta) {
+  const it = ac.items[ac.sel], { b } = find(S, ac.key), end = ta.selectionStart, P = projects(S);
+  const head = b.text.slice(0, ac.start), tail = b.text.slice(end).replace(/^\]\]/, '');
+  let pos = head.length;
+  if (it.act === 'ref') { const ins = `[[PJ/${P[it.id].name}|${it.id}]] `; b.text = head + ins + tail; pos += ins.length; bump(S); }
+  else {
+    b.text = (head + tail).replace(/^\s+/, ''); pos = 0;
+    if (it.act === 'head') { b.type = 'head'; b.proj = it.id; b.text = ''; b.status = null; bump(S); const nb = newAfter(S, b.key); touch(true); return render(nb.key, 0); }
+    if (it.act === 'wrap') toast(wrapInProject(S, b.key, it.id).msg);
+    else createProject(S, b.key, it.sub, it.act, it.ctx);
+  }
+  touch(true); render(b.key, pos);
+}
+
+// ---- 侧面板：原文与问题列表 ----
+function updateSide() {
+  const text = serializePage(S, cur), pre = $('#raw'); pre.textContent = '';
+  const lines = text.replace(/\n$/, '').split('\n'), next = new Set(lines);
+  const metaRe = new RegExp(`^(.*?)( \\(\\(${ID_RE}\\)\\)(?: \\^\\w+\\(.*\\))*)$`);
+  for (const l of lines) {
+    const d = el('div', 'ln' + (prevLines.size && !prevLines.has(l) && l ? ' chg' : '')), m = l.trim().startsWith('- ') && l.match(metaRe);
+    if (m) d.append(document.createTextNode(m[1]), el('span', 'meta', m[2])); else d.textContent = l || ' ';
+    pre.appendChild(d);
+  }
+  prevLines = next;
+}
+function updateIssues() { drawNav(); if (view === 'issues') drawView(); }
+
+async function go(date, focusKey) {
+  flush();
+  cur = date; prevLines = new Set(); navCur = null; navIdx = null;
+  if (view !== 'journal') { view = 'journal'; $('#journal').hidden = false; $('#view').hidden = true; drawNav(); }
+  $('#file').textContent = `data/${cur}.md`;
+  if (FS.files.has(date) && !dirty.has(date) && await FS.changed(date)) { await reloadPage(date); toast('Loaded the newer version from disk'); }
+  render(focusKey);
+}
+
+// ---- 启动 ----
+async function releaseWorkspaceLock() {
+  const lock = workspaceLock;
+  if (!lock) return;
+  workspaceLock = null;
+  lock.release();
+  await lock.done;
+}
+
+async function acquireWorkspaceLock() {
+  if (!navigator.locks) return true;
+  const name = 'worklog:' + FS.dir.name;
+  if (workspaceLock?.name === name) return true;
+  await releaseWorkspaceLock();
+  return new Promise((resolve, reject) => {
+    const done = navigator.locks.request(name, { ifAvailable: true }, (lock) => {
+      if (!lock) { resolve(false); return; }
+      return new Promise((release) => {
+        workspaceLock = { name, release, done };
+        resolve(true);
+      });
+    });
+    done.catch(reject);
+  });
+}
+
+async function openWorkspace(select, afterOpen) {
+  if (openingWorkspace) return;
+  const app = $('#app');
+  let loading = false;
+  openingWorkspace = app.inert = true;
+  try {
+    if (dirty.size) {
+      await flush();
+      if (dirty.size) return;
+    }
+    if (await select() === false) return;
+    loading = true;
+    await start();
+    loading = false;
+    if (afterOpen) afterOpen();
+  } catch (e) {
+    if (loading) {
+      app.hidden = true;
+      $('#gate').hidden = false;
+      await releaseWorkspaceLock();
+    }
+    if (e.name === 'AbortError') return;
+    if (app.hidden) $('#gate-msg').textContent = 'Could not open the folder: ' + e.message;
+    else toast(e.message);
+  } finally {
+    openingWorkspace = app.inert = false;
+  }
+}
+
+async function start() {
+  readOnly = !await acquireWorkspaceLock();
+  const t0 = performance.now();
+  const pairs = await FS.loadAll(), t1 = performance.now(), back = [];
+  $('#gate').hidden = true; $('#app').hidden = false;
+  banner(readOnly ? 'This workspace is open in another tab. This tab is read-only.' : '');
+  S = newState();
+  let n = 0;
+  for (const [date, text] of pairs) { if (loadPage(S, date, text, today()).needsWrite) back.push(date); }
+  settle(S, today());
+  eachBlock(S, () => n++);
+  const t2 = performance.now();
+  loadInfo = `${FS.dir.name} · ${pairs.length} files · ${n} records · read ${Math.round(t1 - t0)} ms · parse ${Math.round(t2 - t1)} ms`;
+  $('#stats').textContent = loadInfo;
+  // 手写行正规化后写回；刚被改过的文件暂缓，避免和外部编辑器抢写
+  if (!readOnly) { for (const d of back) if (FS.age(d) > 5000) dirty.add(d); if (dirty.size) flush(); }
+  updateIssues();
+  await go(cur);
+}
+
+async function boot() {
+  $('#prev').onclick = () => go(shiftDay(cur, -1));
+  $('#next').onclick = () => go(shiftDay(cur, 1));
+  $('#today').onclick = () => go(today());
+  $('#add').onclick = () => { if (readOnly) return; const nb = mk({ date: cur }); S.pages[cur].push(nb); render(nb.key, 0); };
+  $('#side-toggle').onclick = () => { showSide = !showSide; $('#side').hidden = !showSide; $('#side-toggle').setAttribute('aria-pressed', String(showSide)); if (showSide) { prevLines = new Set(); updateSide(); } };
+  $('#nav-toggle').onclick = () => { cfg.nav = cfg.nav === 'narrow' ? 'wide' : 'narrow'; saveCfg(); drawNav(); };
+  $('#help-btn').onclick = () => toggleHelp();
+  // 搜索：清空搜索框就回到搜索之前所在的页面；Enter 把焦点交还页面（接着用 J/K），Esc 清空并退出
+  let qTimer = null, before = null;
+  const runSearch = (q) => {
+    if (q) { if (view !== 'search') before = [view, viewArg]; show('search', q); }
+    else if (view === 'search') { const [v, a] = before || ['journal']; before = null; show(v, a); }
+  };
+  $('#q').oninput = (e) => { clearTimeout(qTimer); const q = e.target.value.trim(); qTimer = setTimeout(() => runSearch(q), q ? 150 : 0); };
+  $('#q').onkeydown = (e) => {
+    if (e.isComposing) return;
+    if (e.key === 'Escape') { clearTimeout(qTimer); e.target.value = ''; runSearch(''); e.target.blur(); }
+    else if (e.key === 'Enter') { clearTimeout(qTimer); runSearch(e.target.value.trim()); e.target.blur(); }
+  };
+  window.addEventListener('resize', closeAc);
+  $('#editor-wrap').addEventListener('scroll', closeAc);
+  window.addEventListener('focus', async () => {
+    if (openingWorkspace || $('#app').hidden || !FS.files.has(cur)) return;
+    const date = cur, state = S;
+    try {
+      if (await FS.changed(date) && !openingWorkspace && S === state) {
+        if (dirty.has(date)) conflict(date);
+        else { await reloadPage(date); toast('Loaded the newer version from disk'); }
+      }
+    } catch (e) { /* 目录暂时不可用时忽略 */ }
+  });
+  window.addEventListener('beforeunload', (e) => { if (dirty.size) { flush(); e.preventDefault(); } });
+
+  if (!FS.supported()) { $('#gate-msg').textContent = 'This browser cannot open local folders. Use desktop Chrome or Edge.'; $('#pick').hidden = true; return; }
+  $('#pick').onclick = () => openWorkspace(() => FS.pick());
+  const state = await FS.restore();
+  if (state === 'ready') return openWorkspace(() => true);
+  if (state === 'prompt') { const r = $('#regrant'); r.textContent = `Reopen “${FS.dir.name}”`; r.hidden = false; r.onclick = () => openWorkspace(() => FS.grant()); }
+}
+document.addEventListener('DOMContentLoaded', boot);
+
+// ---- 侧栏与只读视图：全部从内存索引现算，不保留任何派生状态 ----
+const NAV = [['journal', 'Journal'], ['projects', 'Projects'], ['working', 'Working'], ['inbox', 'Inbox'], ['archive', 'Archive'], ['issues', 'Maintenance'], ['settings', 'Settings']];
+const TITLES = { projects: 'Projects', working: 'Working', inbox: 'Inbox', archive: 'Archive', issues: 'Maintenance', settings: 'Settings' };
+const moreOpen = new Set();
+const icon = (ch) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="12" y="16.2" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor">${ch}</text></svg>`;
+
+function drawNav() {
+  const st = stats(S, today()), counts = { working: st.open.length, issues: S.diags.length }, box = $('#nav-items');
+  $('#nav').classList.toggle('narrow', cfg.nav === 'narrow');
+  $('#nav-toggle').textContent = cfg.nav === 'narrow' ? '»' : '«';
+  tip($('#nav-toggle'), cfg.nav === 'narrow' ? 'Expand sidebar' : 'Collapse sidebar', 'F');
+  box.textContent = '';
+  for (const [id, label] of NAV) {
+    const b = el('button', 'nav-item' + (view === id || (id === 'projects' && view === 'project') ? ' on' : ''));
+    b.innerHTML = icon(label[0]) + `<span class="nav-label">${label}</span>` + (counts[id] ? `<span class="count${id === 'issues' ? ' warn' : ''}">${counts[id]}</span>` : '');
+    tip(b, label, `${NAV.findIndex((n) => n[0] === id) + 1} · Ctrl+Shift+${label[0]}`); b.onclick = () => show(id);
+    box.appendChild(b);
+  }
+}
+
+function show(v, arg) {
+  if (v === 'journal') return go(cur);
+  view = v; viewArg = arg; closeAc(); navIdx = null; navCur = null;
+  $('#journal').hidden = true; $('#view').hidden = false;
+  drawNav(); drawView();
+  $('#view').scrollTop = 0;
+}
+
+// 点到标签去标签页，点到项目引用去项目页
+function jump(e) {
+  const t = e.target.closest('.person,.kind'), p = e.target.closest('[data-pj]');
+  if (t) { show('tag', t.textContent.replace(/[{}]/g, '')); return true; }
+  if (p && index(S).P[p.dataset.pj]) { show('project', p.dataset.pj); return true; }
+  return false;
+}
+// 一条记录在列表里的样子；点击回到它所在的日期页
+// 行尾的"打开"图标：记录上是回到 Journal，项目标题上是进入项目页；快捷键都是 O
+function openBtn(label, fn, cls) {
+  const j = tip(el('button', 'goto' + (cls ? ' ' + cls : '')), label, 'O');
+  j.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5H3.5v9h9V10M9 3.5h3.5V7M12.5 3.5L7.5 8.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  j.onclick = (e) => { e.stopPropagation(); fn(); };
+  return j;
+}
+function recLine(b, ix, o = {}) {
+  const r = el('div', 'rec' + (b.del ? ' deleted' : '') + (o.stale ? ' stale' : ''));
+  r.appendChild(el('span', 'rec-date', o.short ? b.date.slice(5) : b.date));
+  if (b.status && !o.noStatus) r.appendChild(el('span', 'status ' + b.status, o.age != null ? `${b.status} · ${o.age}d` : b.status));
+  const t = el('span', 'rec-text');
+  t.innerHTML = b.type === 'ord' ? b.text.split('\n').map((l) => richLine(l, ix.P, ix.byId)).join('<br>') : `<strong>${esc(b.text)}</strong>`;
+  r.appendChild(t);
+  if (o.path && b.own && b.own !== 'INBOX' && ix.P[b.own]) {
+    // 项目链只留首尾两级，中间用 … 代替；完整路径放在悬停提示里，点击进入该项目
+    const full = projectPath(ix.P, b.own), parts = full.split(' / '), p = el('span', 'rec-path');
+    // 空间不够时先压缩上级名称，最末一级（记录真正所在的项目）始终完整显示
+    if (parts.length > 1) p.appendChild(el('span', 'up', parts[0] + (parts.length > 2 ? ' / …' : '')));
+    p.appendChild(el('span', 'leaf', (parts.length > 1 ? ' / ' : '') + parts[parts.length - 1]));
+    p.title = `Open project page · ${full}`; p.dataset.pj = b.own;
+    r.appendChild(p);
+  }
+  if (o.action) { const x = el('button', 'mini', o.action[0]); x.onclick = (e) => { e.stopPropagation(); o.action[1](); }; r.appendChild(x); }
+  const j = openBtn('Open in journal', () => go(b.page, b.key));
+  r.appendChild(j);
+  const editable = !readOnly && b.type === 'ord' && !b.del && !lockedBlock(b, stats(S, today()));
+  if (editable) r.classList.add('editable');
+  r.onclick = (e) => { if (r.classList.contains('editing') || jump(e)) return; if (editable) editRec(r, t, b, o); else go(b.page, b.key); };
+  return r;
+}
+// 在列表里原地编辑：改的就是 Journal 里那条记录，保存到它所在的日期文件
+function editRec(r, t, b, o) {
+  const ta = el('textarea'), before = b.text, ver = S.ver;
+  ta.value = b.text; ta.rows = 1; ta.spellcheck = false; ta.setAttribute('aria-label', 'Edit record');
+  origin = { key: b.key, status: b.status, date: b.statusDate };
+  navIdx = navItems().indexOf(r); setCur(r);
+  r.classList.add('editing'); t.textContent = ''; t.appendChild(ta); grow(ta);
+  ta.oninput = () => grow(ta);
+  ta.onkeydown = (e) => {
+    if (e.isComposing) return;
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {   // 和 Journal 一样循环切换状态
+      e.preventDefault();
+      if (!cycle(b)) return;
+      const old = r.querySelector('.status'), chip = b.status ? el('span', 'status ' + b.status, b.status) : null;
+      if (old && chip) old.replaceWith(chip); else if (old) old.remove(); else if (chip) r.insertBefore(chip, t);
+    } else if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); ta.blur(); }
+  };
+  ta.onblur = () => {
+    if (!r.isConnected) return;
+    origin = null;
+    if (!ta.value.trim()) { b.text = before; toast('Empty text ignored. Delete records in the journal.'); }
+    else { b.text = ta.value; commitBlock(S, b, today()); }
+    const opt = { ...o, noStatus: false, stale: false };
+    if (o.age != null && b.statusDate) { opt.age = Math.max(0, daysBetween(b.statusDate, today())); opt.stale = (b.status === 'TODO' || b.status === 'WAIT') && opt.age >= cfg.stale; }
+    const fresh = recLine(b, index(S), opt);
+    if (r.classList.contains('cur')) fresh.classList.add('cur');
+    r.replaceWith(fresh);
+    if (ver !== S.ver) { touch(true, b.page); drawNav(); }
+  };
+  ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+const byDateDesc = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+const byDateAsc = (a, b) => byDateDesc(b, a);
+const byStart = (rev) => (a, b) => { const x = a.statusDate || a.date, y = b.statusDate || b.date; return x === y ? 0 : (x < y) !== rev ? -1 : 1; };
+// 每个页面各自记住时间顺序；dflt 是该页默认是否"最近的在前"
+const newest = (key, dflt) => (cfg[key] == null ? dflt : cfg[key] === 'new');
+function sortBtn(key, dflt) {
+  const on = newest(key, dflt), g = el('button', 'icon-btn sort' + (on ? '' : ' up'));
+  g.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 3.5v12M2.8 12.6l2.7 2.9 2.7-2.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 5h6.5M11 10h4.5M11 15h2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  tip(g, on ? 'Sorted newest first' : 'Sorted oldest first', 'S');
+  g.onclick = () => { cfg[key] = on ? 'old' : 'new'; saveCfg(); drawView(); };
+  return g;
+}
+const empty = (text) => el('p', 'empty', text);
+function listInto(root, list, ix, o) {
+  if (!list.length) return root.appendChild(empty('Nothing here.'));
+  const max = 300;
+  for (const b of list.slice(0, max)) root.appendChild(recLine(b, ix, o));
+  if (list.length > max) root.appendChild(empty(`${list.length - max} more not shown.`));
+}
+
+// ---- 项目生命线（文字）----
+function life(id) {
+  const r = setLife(S, id, today());
+  if (!r.ok) return toast(r.msg);
+  touch(true, r.page); drawNav(); drawView();
+}
+function foldBtn(folded) {
+  const f = el('button', 'fold' + (folded ? '' : ' open'));
+  f.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5l4.5 4.5L6 12.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  tip(f, folded ? 'Expand' : 'Collapse', 'Enter');
+  return f;
+}
+const grpFold = new Set();
+function pjHead(id, st, ix, folded, onFold, count) {
+  const p = st.N[id], head = el('div', 'pj-head');
+  if (onFold) {
+    const f = foldBtn(folded);
+    f.setAttribute('aria-expanded', String(!folded)); head.appendChild(f);
+    head.classList.add('foldable');
+    head.onclick = (e) => { if (e.target.closest('.fold') || !e.target.closest('button')) onFold(); };
+  }
+  const name = el('button', 'pj-name', p.name); name.onclick = () => show('project', id);
+  head.appendChild(name);
+  if (folded && count) head.appendChild(el('span', 'pj-count', `(${p.subEvents})`));
+  const m = [`(${p.days}) days`]; if (p.subTodo) m.push(`(${p.subTodo}) todos`); if (p.subWait) m.push(`(${p.subWait}) waiting`);
+  head.append(el('span', 'pj-meta', m.join(' · ')), el('span', 'cap ' + p.status, p.status), openBtn('Open project page', () => show('project', id), 'in'));
+  const parentClosed = p.type === 'branch' && st.N[p.parent] && st.N[p.parent].closed;
+  if (!readOnly && !parentClosed) { const a = el('button', 'mini act', p.life ? (p.type === 'proj' ? 'Restore' : 'Reopen') : (p.type === 'proj' ? 'Archive' : 'Complete')); a.onclick = () => life(id); head.append(el('span', 'grow'), a); }
+  return head;
+}
+function drawProject(id, st, ix, top) {
+  const p = st.N[id], folded = !!cfg.fold[id], node = el('div', 'pj' + (top ? ' top' : ''));
+  node.appendChild(pjHead(id, st, ix, folded, () => { if (folded) delete cfg.fold[id]; else cfg.fold[id] = 1; saveCfg(); drawView(); }, true));
+  if (folded) return node;
+  const body = el('div', 'pj-body'), ev = p.events, cut = ev.length > 12 && !moreOpen.has(id) ? ev.length - 10 : 0, rev = newest('projOrder', false);
+  const more = cut ? el('button', 'more', `(${cut}) earlier events`) : null;
+  if (more) more.onclick = () => { moreOpen.add(id); drawView(); };
+  // 默认从早到近；反过来时最近的在最上面，"更早的事件"收在最下面，分支也跟着倒序
+  if (rev) { for (let i = ev.length - 1; i >= cut; i--) body.appendChild(recLine(ev[i], ix, { noStatus: true })); if (more) body.appendChild(more); }
+  else { if (more) body.appendChild(more); for (let i = cut; i < ev.length; i++) body.appendChild(recLine(ev[i], ix, { noStatus: true })); }
+  for (const k of rev ? p.kids.slice().reverse() : p.kids) body.appendChild(drawProject(k, st, ix, false));
+  if (!body.childNodes.length) body.appendChild(el('span', 'empty', 'no events yet'));
+  node.appendChild(body);
+  return node;
+}
+
+// ---- 项目生命线（图形）：一条泳道一个分支，横轴是时间，圆点是有事件的日子 ----
+function subtree(id, st, out = [], depth = 0) { out.push([id, depth]); if (depth < 30) for (const k of st.N[id].kids) subtree(k, st, out, depth + 1); return out; }
+function drawGraph(id, st, W) {
+  const t = today(), root = st.N[id], lanes = subtree(id, st), end = root.life || t, span = Math.max(1, daysBetween(root.date, end));
+  const L = 220, R = 170, TOP = 26, H = 30, x0 = L, x1 = Math.max(L + 200, W - R), h = TOP + lanes.length * H + 8;
+  const x = (d) => x0 + Math.min(1, Math.max(0, daysBetween(root.date, d) / span)) * (x1 - x0);
+  const step = [1, 2, 7, 14, 30, 60, 90, 180, 365].find((s) => span / s <= 8) || 730, row = new Map();
+  let g = '';
+  for (let d = 0; d <= span; d += step) {
+    const dt = new Date(Date.UTC(...root.date.split('-').map((n, i) => (i === 1 ? n - 1 : +n))) + d * 86400000).toISOString().slice(0, 10), gx = x0 + (d / span) * (x1 - x0);
+    if (x1 - gx < 46 && d) continue;
+    g += `<line class="g-grid" x1="${gx}" y1="${TOP - 6}" x2="${gx}" y2="${h - 4}"/><text class="g-tick" x="${gx}" y="12" text-anchor="middle">${span > 300 ? dt.slice(2, 7) : dt.slice(5)}</text>`;
+  }
+  g += `<text class="g-tick" x="${x1}" y="12" text-anchor="middle">${root.life ? end.slice(5) : 'today'}</text>`;
+  lanes.forEach(([pid, depth], i) => {
+    const p = st.N[pid], y = TOP + i * H + H / 2, a = x(p.date), b = x(p.life || end), days = new Map();
+    row.set(pid, y);
+    if (i) g += `<path class="g-line" d="M${a} ${row.get(p.parent)}V${y}"/>`;
+    g += `<line class="g-line${p.life ? ' done' : ''}" x1="${a}" y1="${y}" x2="${Math.max(b, a + 2)}" y2="${y}"/>`;
+    if (p.life) g += `<rect class="g-end" x="${b - 1.5}" y="${y - 6}" width="3" height="12" rx="1"/>`;
+    g += `<text class="g-name${i ? '' : ' main'}" data-pj="${pid}" x="${8 + depth * 14}" y="${y + 4}">${esc(p.name.length > 22 - depth * 2 ? p.name.slice(0, 21 - depth * 2) + '…' : p.name)}</text>`;
+    const m = []; if (p.todo) m.push(`(${p.todo}) todos`); if (p.wait) m.push(`(${p.wait}) waiting`);
+    g += `<text class="g-meta" x="${x1 + 14}" y="${y + 4}">${m.join(' · ')}</text>`;
+    for (const e of p.events) { const l = days.get(e.date); if (l) l.push(e); else days.set(e.date, [e]); }
+    for (const [d, l] of days) g += `<circle class="g-dot" data-date="${d}" data-key="${l[0].key}" cx="${x(d)}" cy="${y}" r="${l.length > 1 ? 5.5 : 4}"><title>${esc(d + '\n' + l.map((e) => e.text.split('\n')[0]).join('\n'))}</title></circle>`;
+  });
+  const box = el('div', 'graph');
+  box.innerHTML = `<svg width="${W}" height="${h}" viewBox="0 0 ${W} ${h}" role="img" aria-label="${esc(root.name)} lifeline">${g}</svg>`;
+  box.onclick = (e) => { const d = e.target.closest('.g-dot'); if (d) return go(d.dataset.date, d.dataset.key); jump(e); };
+  return box;
+}
+
+// ---- 项目页 ----
+function drawProjectPage(root, id, st, ix) {
+  const p = st.N[id], t = today();
+  if (!p) return root.appendChild(empty('This project no longer exists.'));
+  const crumb = el('div', 'crumb'), chain = []; for (let c = p, n = 0; c && n < 20; c = c.type === 'branch' ? st.N[c.parent] : null, n++) chain.unshift(c);
+  const all = el('button', 'link', 'Projects'); all.onclick = () => show('projects'); crumb.append(all);
+  for (const c of chain.slice(0, -1)) { const b = el('button', 'link', c.name); b.onclick = () => show('project', c.id); crumb.append(el('span', null, ' / '), b); }
+  root.appendChild(crumb);
+  const head = pjHead(id, st, ix, false, null, false), decl = el('button', 'mini', 'Open in journal');
+  head.classList.add('page'); head.querySelector('.goto').remove(); decl.onclick = () => go(p.date, ix.byId[id].key); head.append(decl, sortBtn('pageOrder', true));
+  root.appendChild(head);
+  root.appendChild(drawGraph(id, st, Math.max(640, root.clientWidth - 48)));
+  const ids = subtree(id, st).map((x) => x[0]), recs = [];
+  for (const k of ids) for (const b of ix.byProj.get(k) || []) if (!b.del) recs.push(b);
+  const pageNew = newest('pageOrder', true), open = recs.filter((b) => b.status === 'TODO' || b.status === 'WAIT').sort(byStart(pageNew));
+  root.appendChild(el('h2', null, `Open (${open.length})`));
+  if (!open.length) root.appendChild(empty('Nothing open.'));
+  for (const b of open) { const age = Math.max(0, daysBetween(b.statusDate || b.date, t)); root.appendChild(recLine(b, ix, { path: b.own !== id, age, stale: age >= cfg.stale, short: true })); }
+  if (p.kids.length) { root.appendChild(el('h2', null, `Branches (${p.kids.length})`)); for (const k of p.kids) root.appendChild(pjHead(k, st, ix, false, null, false)); }
+  root.appendChild(el('h2', null, `Records (${recs.length})`));
+  if (!recs.length) return root.appendChild(empty('No records yet.'));
+  recs.sort(pageNew ? byDateDesc : byDateAsc);
+  let day = null;
+  for (const b of recs.slice(0, 400)) { if (b.date !== day) root.appendChild(el('div', 'day', day = b.date)); const r = recLine(b, ix, { path: b.own !== id }); r.firstChild.remove(); root.appendChild(r); }
+  if (recs.length > 400) root.appendChild(empty(`${recs.length - 400} ${pageNew ? 'older' : 'newer'} records not shown.`));
+}
+
+// ---- 按项目分栏：栏的顺序跟项目树一致（项目、子项目各一栏），栏内保持传入的顺序；Inbox 放最后 ----
+function groupBtn(key) {
+  const g = el('button', 'icon-btn grp');
+  g.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3" width="5" height="3.4" rx="1" fill="currentColor"/><path d="M6 9h11M6 12.2h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/><rect x="2.5" y="14.6" width="5" height="3.4" rx="1" fill="currentColor"/><path d="M10 4.7h7M10 16.3h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  tip(g, 'Group by project', 'G'); g.setAttribute('aria-pressed', String(!!cfg[key]));
+  g.onclick = () => { cfg[key] = !cfg[key]; saveCfg(); drawView(); };
+  return g;
+}
+function drawGroups(root, list, st, ix, opt) {
+  const groups = new Map(), order = [];
+  for (const b of list) { const k = ix.P[b.own] ? b.own : 'INBOX'; let a = groups.get(k); if (!a) groups.set(k, a = []); a.push(b); }
+  for (const t of st.tops) for (const [id] of subtree(t, st)) if (groups.has(id)) order.push(id);
+  for (const k of groups.keys()) if (k !== 'INBOX' && !order.includes(k)) order.push(k);
+  if (groups.has('INBOX')) order.push('INBOX');
+  for (const k of order) {
+    const fk = view + ':' + (viewArg || '') + ':' + k, folded = grpFold.has(fk), h = el('h3', 'group grp-head'), items = groups.get(k), f = foldBtn(folded);
+    f.setAttribute('aria-expanded', String(!folded));
+    h.appendChild(f);
+    if (k === 'INBOX') h.appendChild(el('span', null, 'Inbox')); else { const b = el('button', 'pj-name', projectPath(ix.P, k)); b.onclick = () => show('project', k); h.appendChild(b); }
+    h.appendChild(el('span', 'pj-meta', `(${items.length})`));
+    if (k !== 'INBOX') h.appendChild(openBtn('Open project page', () => show('project', k), 'in'));
+    h.onclick = (e) => { if (e.target.closest('.pj-name,.goto')) return; if (folded) grpFold.delete(fk); else grpFold.add(fk); drawView(); };
+    root.appendChild(h);
+    if (!folded) for (const b of items) root.appendChild(recLine(b, ix, opt(b)));
+  }
+}
+
+// ---- 设置 ----
+function seg(label, key, options) {
+  const row = el('div', 'set-row'), g = el('div', 'seg'); g.setAttribute('role', 'group'); g.setAttribute('aria-label', label);
+  row.appendChild(el('span', 'set-label', label));
+  for (const [val, text] of options) { const b = el('button', null, text); b.setAttribute('aria-pressed', String(cfg[key] === val)); b.onclick = () => { cfg[key] = val; saveCfg(); drawView(); }; g.appendChild(b); }
+  row.appendChild(g);
+  return row;
+}
+function drawSettings(root) {
+  root.appendChild(seg('Status label', 'chip', [['date', 'Date'], ['days', 'Days'], ['none', 'None']]));
+  root.appendChild(seg('Theme', 'theme', [['system', 'System'], ...Object.entries(THEMES)]));
+  root.appendChild(seg('Color style', 'color', [['full', 'Full'], ['soft', 'Soft'], ['mono', 'Mono']]));
+  const row = el('div', 'set-row'), n = el('input'); n.type = 'number'; n.min = 1; n.max = 365; n.value = cfg.stale; n.id = 'stale';
+  const lab = el('label', 'set-label', 'Stale after (days)'); lab.htmlFor = 'stale';
+  n.onchange = () => { cfg.stale = Math.max(1, Math.min(365, parseInt(n.value, 10) || 7)); saveCfg(); };
+  row.append(lab, n); root.appendChild(row);
+  const ws = el('div', 'set-row'), ch = el('button', 'btn', 'Change folder');
+  ch.onclick = () => openWorkspace(() => FS.pick());
+  ws.append(el('span', 'set-label', 'Workspace'), el('span', 'chip', FS.where), ch); root.appendChild(ws);
+  root.appendChild(el('h2', null, 'About'));
+  for (const [k, val] of [['Version', APP_VERSION], ['Data format', 'worklog-schema ' + SCHEMA], ['Storage', 'Plain text files on this computer. Nothing is sent anywhere.'], ['License', 'MIT License. Free to use and modify, no warranty.']]) {
+    const r = el('div', 'set-row'); r.append(el('span', 'set-label', k), el('span', 'set-val', val)); root.appendChild(r);
+  }
+}
+
+function drawView() { drawViewBody(); markCur(); }
+function drawViewBody() {
+  if (view === 'journal') return;
+  const root = $('#view'), ix = index(S), st = stats(S, today()), t = today();
+  root.textContent = '';
+  if (view === 'project') return drawProjectPage(root, viewArg, st, ix);
+  const h1 = el('h1', null, view === 'tag' ? viewArg : view === 'search' ? `Search: ${viewArg}` : TITLES[view]);
+  root.appendChild(h1);
+  if (view === 'projects' || view === 'archive') {
+    const ids = st.tops.filter((id) => !!st.N[id].life === (view === 'archive'));
+    if (view === 'projects' && ids.length) {
+      const g = el('div', 'seg small'); g.setAttribute('role', 'group'); g.setAttribute('aria-label', 'Lifeline style');
+      for (const [val, text] of [['text', 'Text'], ['graph', 'Graph']]) { const b = el('button', null, text); b.setAttribute('aria-pressed', String(cfg.lifeline === val)); b.onclick = () => { cfg.lifeline = val; saveCfg(); drawView(); }; g.appendChild(b); }
+      h1.appendChild(g);
+      if (cfg.lifeline !== 'graph') h1.appendChild(sortBtn('projOrder', false));
+      if (cfg.lifeline === 'graph') {
+        const openId = cfg.graphOpen === '-' ? null : ids.includes(cfg.graphOpen) ? cfg.graphOpen : ids[0], W = Math.max(640, root.clientWidth - 48);
+        for (const id of ids) {
+          const node = el('div', 'pj top acc'), isOpen = id === openId;
+          node.appendChild(pjHead(id, st, ix, !isOpen, () => { cfg.graphOpen = isOpen ? '-' : id; saveCfg(); drawView(); }, true));
+          if (isOpen) node.appendChild(drawGraph(id, st, W));
+          root.appendChild(node);
+        }
+        return;
+      }
+    }
+    if (view === 'archive' && ids.length) h1.appendChild(sortBtn('projOrder', false));
+    if (!ids.length) root.appendChild(empty(view === 'archive' ? 'No archived projects.' : 'No projects yet. Type [[ in the journal to create one.'));
+    for (const id of ids) root.appendChild(drawProject(id, st, ix, true));
+  } else if (view === 'working') {
+    const cols = el('div', 'cols');
+    h1.append(groupBtn('workGroup'), sortBtn('workOrder', false));
+    for (const s of ['TODO', 'WAIT']) {
+      const list = st.open.filter((b) => b.status === s).sort(byStart(newest('workOrder', false))), col = el('section', 'col');
+      const opt = (b) => { const age = Math.max(0, daysBetween(b.statusDate || b.date, t)); return { path: !cfg.workGroup, age, stale: age >= cfg.stale, short: true }; };
+      col.appendChild(el('h2', null, `${s} (${list.length})`));
+      if (!list.length) col.appendChild(empty('Nothing here.'));
+      else if (cfg.workGroup) drawGroups(col, list, st, ix, opt);
+      else for (const b of list) col.appendChild(recLine(b, ix, opt(b)));
+      cols.appendChild(col);
+    }
+    root.appendChild(cols);
+  } else if (view === 'inbox') { h1.appendChild(sortBtn('inboxOrder', true)); listInto(root, st.inbox.slice().sort(newest('inboxOrder', true) ? byDateDesc : byDateAsc), ix, {}); }
+  else if (view === 'tag') {
+    const list = recordsByTag(S, viewArg).filter((b) => !b.del).sort(newest('tagOrder', true) ? byDateDesc : byDateAsc);
+    h1.append(el('span', 'pj-count', `(${list.length})`), groupBtn('tagGroup'), sortBtn('tagOrder', true));
+    if (!cfg.tagGroup || !list.length) return listInto(root, list, ix, { path: true });
+    drawGroups(root, list, st, ix, () => ({}));
+  }
+  else if (view === 'search') {
+    const q = viewArg.toLowerCase(), hits = [];
+    eachBlock(S, (b) => { if (b.type !== 'raw' && b.type !== 'head' && !b.del && b.text.toLowerCase().includes(q)) hits.push(b); });
+    listInto(root, hits.sort(byDateDesc), ix, { path: true });
+  } else if (view === 'issues') {
+    root.appendChild(el('h2', null, `Issues (${S.diags.length})`));
+    if (!S.diags.length) root.appendChild(empty('No issues.'));
+    for (const d of S.diags) {
+      const b = el('button', 'issue ' + d.level);
+      b.append(el('span', 'lvl', d.level === 'warn' ? 'warn' : d.level === 'block' ? 'block' : 'error'), el('span', 'rec-date', d.date), el('span', null, d.msg + (d.line ? ` (line ${d.line})` : '')));
+      b.onclick = () => go(d.date, d.key); root.appendChild(b);
+    }
+    const dels = []; eachBlock(S, (b) => { if (b.del) dels.push(b); });
+    root.appendChild(el('h2', null, `Deleted records (${dels.length})`));
+    if (!dels.length) root.appendChild(empty('None.'));
+    for (const b of dels) root.appendChild(recLine(b, ix, { path: true, action: readOnly ? null : ['Restore', () => { b.del = null; bump(S); touch(true, b.page); drawView(); }] }));
+    root.appendChild(el('h2', null, 'Workspace'));
+    const row = el('div', 'set-row'), re = el('button', 'btn', 'Rescan workspace');
+    re.onclick = () => openWorkspace(() => true, () => { show('issues'); toast('Workspace rescanned'); });
+    row.append(el('span', 'chip', loadInfo), re); root.appendChild(row);
+  } else if (view === 'settings') drawSettings(root);
+}
+
+// ---- 页面级键盘导航 ----
+// 焦点可以停在记录和项目标题上；Journal 里每个块都是一站
+const HEADS = '#view .pj-head, #view .grp-head';
+function navItems() { return [...document.querySelectorAll(view === 'journal' ? '#editor .row' : '#view .rec, ' + HEADS)]; }
+function setCur(node) {
+  for (const x of document.querySelectorAll('.cur')) x.classList.remove('cur');
+  if (node) { node.classList.add('cur'); node.scrollIntoView({ block: 'nearest' }); }
+}
+function markCur() {   // 重画之后把焦点标回去
+  const n = view === 'journal' ? navCur && document.querySelector(`#editor .block[data-key="${navCur}"] > .row`) : navIdx != null && navItems()[navIdx];
+  if (n) n.classList.add('cur');
+}
+const KEYS = [
+  ['Move', [['J  ↓', 'Next item'], ['K  ↑', 'Previous item'], ['Shift+J  Ctrl+J', 'Next project heading'], ['Shift+K  Ctrl+K', 'Previous project heading']]],
+  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['G', 'Group by project (Working, tags)'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['?', 'This help']]],
+  ['Go to', NAV.map(([, label], i) => [`${i + 1}  Ctrl+Shift+${label[0]}`, label])],
+  ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['Alt+Shift+↑↓', 'Move block (journal)'], ['[[', 'Project menu (journal)']]]
+];
+function toggleHelp() {
+  const d = $('#help');
+  if (d.open) return d.close();
+  d.textContent = '';
+  const x = el('button', 'mini', 'Esc'); x.onclick = () => d.close();
+  const top = el('div', 'help-top'); top.append(el('strong', null, 'Keyboard shortcuts'), x); d.appendChild(top);
+  const grid = el('div', 'help-grid');
+  for (const [title, rows] of KEYS) {
+    const sec = el('section'); sec.appendChild(el('h2', null, title));
+    for (const [k, what] of rows) { const r = el('div', 'help-row'); r.append(el('kbd', null, k), el('span', null, what)); sec.appendChild(r); }
+    grid.appendChild(sec);
+  }
+  d.appendChild(grid);
+  d.showModal();
+}
+function navKey(e) {
+  if (openingWorkspace || $('#app').hidden || e.metaKey || e.altKey || e.isComposing) return;
+  const L = e.code && e.code.startsWith('Key') ? e.code[3] : (e.key || '').length === 1 ? e.key.toUpperCase() : '';
+  // 侧栏跳转：Ctrl+Shift+首字母，在任何地方都有效（包括编辑中）
+  if (e.ctrlKey && e.shiftKey) {
+    const hit = L && NAV.find(([, label]) => label[0] === L);
+    if (!hit) return;
+    e.preventDefault(); e.stopPropagation();
+    if ($('#help').open) $('#help').close();
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    return void show(hit[0]);
+  }
+  const a = document.activeElement, tag = a && a.tagName, from = e.target && e.target.tagName;
+  if ([tag, from].some((x) => x === 'TEXTAREA' || x === 'INPUT' || x === 'SELECT')) return;   // 编辑框里按的键不归这里管
+  if ($('#help').open) { if (e.key === '?') { e.preventDefault(); toggleHelp(); } return; }
+  if (e.key === '?') { e.preventDefault(); return toggleHelp(); }
+  if (e.key === '/' && !e.ctrlKey) {   // 搜索框；侧栏折叠着就先展开
+    e.preventDefault();
+    if (cfg.nav === 'narrow') { cfg.nav = 'wide'; saveCfg(); drawNav(); }
+    $('#q').focus(); $('#q').select(); return;
+  }
+  const down = L === 'J' || e.key === 'ArrowDown', up = L === 'K' || e.key === 'ArrowUp';
+  const items = navItems(), i = items.findIndex((x) => x.classList.contains('cur')), cur = items[i];
+  const move = (n) => {
+    e.preventDefault();
+    if (a && a.blur && a !== document.body) a.blur();   // 否则回车会触发刚才点过的按钮
+    if (n < 0 || n >= items.length) return;
+    navIdx = n; if (view === 'journal') navCur = items[n].parentNode.dataset.key;
+    setCur(items[n]);
+  };
+  if (/^[1-7]$/.test(e.key) && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void show(NAV[e.key - 1][0]); }   // 数字键：侧栏第几项
+  if (e.ctrlKey || e.shiftKey && (L === 'J' || L === 'K')) {   // Ctrl+J/K 或 Shift+J/K：跳到下一个、上一个项目标题
+    if (!down && !up || e.key.startsWith('Arrow')) return;
+    const isHead = (x) => (view === 'journal' ? x.classList.contains('decl') : !x.classList.contains('rec'));
+    let n = i;
+    do { n += down ? 1 : -1; } while (n >= 0 && n < items.length && !isHead(items[n]));
+    return move(n);
+  }
+  if (down || up) { if (items.length) move(i < 0 ? 0 : Math.max(0, Math.min(items.length - 1, i + (down ? 1 : -1)))); return; }
+  if (L === 'F' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#nav-toggle').click(); }
+  if (L === 'S' && view !== 'journal') { const g = $('#view .icon-btn.sort'); if (g) { e.preventDefault(); g.click(); } return; }
+  if (L === 'G' && view !== 'journal') { const g = $('#view .icon-btn.grp'); if (g) { e.preventDefault(); g.click(); } return; }
+  if (e.key === 'Escape') { if (cur) { navIdx = null; navCur = null; setCur(null); } return; }
+  if (!cur || tag === 'BUTTON' && e.key === 'Enter') return;
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (view === 'journal') focusBlock(cur.parentNode.dataset.key);
+    else if (cur.classList.contains('rec')) { if (cur.classList.contains('editable')) cur.click(); }
+    else if (cur.classList.contains('foldable') || cur.classList.contains('grp-head')) cur.click();
+  } else if (L === 'O' && view !== 'journal') {
+    e.preventDefault();
+    const b = cur.querySelector('.goto') || cur.querySelector('.pj-name');
+    if (b) b.click();
+  }
+}
+window.addEventListener('keydown', navKey, true);
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<div id="gate">
+  <h1>Worklog</h1>
+  <p id="gate-msg">Choose the Worklog folder, the one that contains this file. Your records are kept there as plain text files, in its <code>data</code> folder.</p>
+  <button class="btn primary" id="regrant" hidden></button>
+  <button class="btn primary" id="pick">Choose workspace folder</button>
+</div>
+<div id="app" hidden>
+  <nav id="nav" aria-label="Main">
+    <div id="nav-head"><span id="brand">Worklog</span><button id="nav-toggle">«</button></div>
+    <input id="q" type="search" placeholder="Search" title="Search (/)" aria-label="Search records">
+    <div id="nav-items"></div>
+    <span class="grow"></span>
+    <button id="help-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+  </nav>
+  <div id="col">
+    <div id="banner" role="alert" hidden></div>
+    <div id="journal">
+      <header>
+        <button class="btn sq" id="prev" title="Previous day" aria-label="Previous day">‹</button>
+        <button class="btn sq" id="next" title="Next day" aria-label="Next day">›</button>
+        <button class="btn" id="today" title="Go to today">Today</button>
+        <h1 id="title"></h1>
+        <span class="chip" id="file"></span>
+        <span class="grow"></span>
+        <button class="btn" id="side-toggle" title="Show file source" aria-pressed="false">Source</button>
+      </header>
+      <main>
+        <section id="editor-wrap" aria-label="Journal">
+          <div id="editor"></div>
+          <button id="add">+ New block</button>
+        </section>
+        <aside id="side" hidden><pre id="raw"></pre></aside>
+      </main>
+    </div>
+    <div id="view" hidden></div>
+    <footer><span id="stats"></span><span class="grow"></span><span id="saved" role="status"></span></footer>
+  </div>
+</div>
+<div id="ac" hidden></div>
+<dialog id="help" aria-label="Keyboard shortcuts"></dialog>
+<div id="toast" role="status"></div>
