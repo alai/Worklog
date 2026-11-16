@@ -383,8 +383,18 @@ function mergeUp(S, key) {
 function deleteBlock(S, key, today) {
   const { b } = find(S, key);
   if (b.type === 'raw') return { ok: false, msg: 'Fix unrecognized lines in a text editor' };
-  if (b.children.length) return { ok: false, msg: 'This block has children. Move or delete them first' };
-  if (!b.id || b.type === 'head') { removeBlock(S, key); return { ok: true }; }
+  // 还没写内容的空子块只是占位（选完项目标题后自动给的那一行），不算"有子块"
+  const real = b.children.filter((c) => !(c.type === 'ord' && !c.id && !hasContent(c) && !c.children.length));
+  if (b.type === 'head') {
+    // 项目标题块只是一个分组标记：删掉的是这一行，不是项目。它下面的记录原地上移一级，归属随缩进重新推导
+    const loc = find(S, key);
+    for (const c of real) c.extParent = null;
+    loc.list.splice(loc.index, 1, ...real); bump(S);
+    return { ok: true, focus: real[0] && real[0].key, msg: real.length ? `Heading removed. ${real.length} ${real.length === 1 ? 'record' : 'records'} moved up one level` : '' };
+  }
+  if (real.length) return { ok: false, msg: b.type === 'ord' ? 'This block has children. Move or delete them first' : 'The project still has records or branches, so it cannot be deleted' };
+  b.children = [];
+  if (!b.id) { removeBlock(S, key); return { ok: true }; }
   if (b.type !== 'ord') {
     let used = false;
     eachBlock(S, (x) => { if (x.owner === b.id || x.proj === b.id) used = true; });

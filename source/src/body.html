@@ -19,7 +19,7 @@
         <button class="btn sq" id="prev" title="Previous day" aria-label="Previous day">‹</button>
         <button class="btn sq" id="next" title="Next day" aria-label="Next day">›</button>
         <button class="btn" id="today" title="Go to today">Today</button>
-        <h1 id="title"></h1>
+        <h1 id="title" role="button" tabindex="0" title="Pick a date (D)" aria-haspopup="dialog"></h1>
         <span class="chip" id="file"></span>
         <span class="grow"></span>
         <button class="btn" id="side-toggle" title="Show file source" aria-pressed="false">Source</button>
@@ -38,4 +38,5 @@
 </div>
 <div id="ac" hidden></div>
 <dialog id="help" aria-label="Keyboard shortcuts"></dialog>
+<div id="dp" role="dialog" aria-label="Pick a date" hidden></div>
 <div id="toast" role="status"></div>

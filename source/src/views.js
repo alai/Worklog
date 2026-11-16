@@ -72,7 +72,7 @@ function editRec(r, t, b, o) {
   origin = { key: b.key, status: b.status, date: b.statusDate };
   navIdx = navItems().indexOf(r); setCur(r);
   r.classList.add('editing'); t.textContent = ''; t.appendChild(ta); grow(ta);
-  ta.oninput = () => grow(ta);
+  ta.oninput = () => { grow(ta); checkDate(ta); };
   ta.onkeydown = (e) => {
     if (e.isComposing) return;
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {   // 和 Journal 一样循环切换状态
@@ -359,9 +359,9 @@ function markCur() {   // 重画之后把焦点标回去
 }
 const KEYS = [
   ['Move', [['J  ↓', 'Next item'], ['K  ↑', 'Previous item'], ['Shift+J  Ctrl+J', 'Next project heading'], ['Shift+K  Ctrl+K', 'Previous project heading']]],
-  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['G', 'Group by project (Working, tags)'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['?', 'This help']]],
+  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['G', 'Group by project (Working, tags)'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['D', 'Pick a date (journal)'], ['?', 'This help']]],
   ['Go to', NAV.map(([, label], i) => [`${i + 1}  Ctrl+Shift+${label[0]}`, label])],
-  ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['Alt+Shift+↑↓', 'Move block (journal)'], ['[[', 'Project menu (journal)']]]
+  ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['Alt+Shift+↑↓', 'Move block (journal)'], ['[[', 'Project menu (journal)'], ['/date', 'Insert a date from the calendar']]]
 ];
 function toggleHelp() {
   const d = $('#help');
@@ -379,6 +379,7 @@ function toggleHelp() {
   d.showModal();
 }
 function navKey(e) {
+  if (dp) return;   // 日期选择器开着时，键盘归它
   if (openingWorkspace || $('#app').hidden || e.metaKey || e.altKey || e.isComposing) return;
   const L = e.code && e.code.startsWith('Key') ? e.code[3] : (e.key || '').length === 1 ? e.key.toUpperCase() : '';
   // 侧栏跳转：Ctrl+Shift+首字母，在任何地方都有效（包括编辑中）
@@ -417,6 +418,7 @@ function navKey(e) {
     return move(n);
   }
   if (down || up) { if (items.length) move(i < 0 ? 0 : Math.max(0, Math.min(items.length - 1, i + (down ? 1 : -1)))); return; }
+  if (L === 'D' && view === 'journal' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#title').click(); }
   if (L === 'F' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#nav-toggle').click(); }
   if (L === 'S' && view !== 'journal') { const g = $('#view .icon-btn.sort'); if (g) { e.preventDefault(); g.click(); } return; }
   if (L === 'G' && view !== 'journal') { const g = $('#view .icon-btn.grp'); if (g) { e.preventDefault(); g.click(); } return; }
@@ -434,3 +436,69 @@ function navKey(e) {
   }
 }
 window.addEventListener('keydown', navKey, true);
+
+// ---- 日期选择器：Journal 标题上用来跳到某一天；编辑时输入 /date 用来插入日期文字 ----
+// 只是选日期，不创建任何文件；有记录的日子下面带一个小点
+let dp = null;
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseYmd = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+function closeDate() { if (!dp) return; dp = null; $('#dp').hidden = true; }
+function openDate(anchor, sel, onPick, owner) {
+  dp = { anchor, cur: validDate(sel) ? sel : today(), onPick, owner };
+  drawDate();
+}
+function drawDate() {
+  const box = $('#dp'), c = parseYmd(dp.cur), y = c.getFullYear(), m = c.getMonth(), t = today();
+  box.textContent = '';
+  const head = el('div', 'dp-head'), prev = tip(el('button', 'dp-nav', '‹'), 'Previous month', 'PageUp'), next = tip(el('button', 'dp-nav', '›'), 'Next month', 'PageDown');
+  prev.onclick = () => shiftDate(0, -1); next.onclick = () => shiftDate(0, 1);
+  head.append(prev, el('span', 'dp-title', `${MONTHS[m]} ${y}`), next); box.appendChild(head);
+  const grid = el('div', 'dp-grid');
+  for (const w of ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']) grid.appendChild(el('span', 'dp-week', w));
+  const first = new Date(y, m, 1), lead = (first.getDay() + 6) % 7;   // 一周从周一开始
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(y, m, 1 - lead + i), s = ymd(d), b = el('button', 'dp-day' + (d.getMonth() !== m ? ' out' : '') + (s === t ? ' today' : '') + (s === dp.cur ? ' on' : '') + (S.pages[s] && S.pages[s].some(hasContent) ? ' has' : ''), String(d.getDate()));
+    b.onclick = () => pickDate(s);
+    grid.appendChild(b);
+  }
+  box.appendChild(grid);
+  const foot = el('div', 'dp-foot'), now = el('button', 'mini', 'Today'); now.onclick = () => pickDate(t);
+  foot.append(now, el('span', 'dp-hint', 'arrows · Enter · Esc')); box.appendChild(foot);
+  box.hidden = false;
+  const r = dp.anchor.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+  box.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+  box.style.top = (r.bottom + h + 8 > innerHeight && r.top - h - 6 > 0 ? r.top - h - 6 : r.bottom + 6) + 'px';
+}
+function shiftDate(days, months) {
+  const d = parseYmd(dp.cur);
+  if (months) { const day = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + months); d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); }
+  else d.setDate(d.getDate() + days);
+  dp.cur = ymd(d); drawDate();
+}
+function pickDate(s) { const f = dp.onPick; closeDate(); f(s); }
+// 输入 /date（前面是行首或空白）时在光标所在的输入框下弹出；选中后用 2025-11-23 这样的文字替换掉 /date
+function checkDate(ta) {
+  const p = ta.selectionStart, hit = p === ta.selectionEnd && /(^|\s)\/date$/.test(ta.value.slice(0, p));
+  if (!hit) { if (dp && dp.owner === ta) closeDate(); return; }
+  openDate(ta, today(), (s) => {
+    const q = ta.selectionStart, v = ta.value;
+    if (v.slice(q - 5, q) !== '/date') return;
+    ta.value = v.slice(0, q - 5) + s + v.slice(q); ta.setSelectionRange(q - 5 + s.length, q - 5 + s.length);
+    ta.dispatchEvent(new Event('input'));
+  }, ta);
+}
+window.addEventListener('keydown', (e) => {
+  if (!dp || e.isComposing) return;
+  const k = e.key, step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [-7, 0], ArrowDown: [7, 0], PageUp: [0, -1], PageDown: [0, 1] }[k];
+  if (step) { e.preventDefault(); e.stopPropagation(); return shiftDate(step[0], step[1]); }
+  if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); return pickDate(dp.cur); }
+  if (k === 'Escape') { e.preventDefault(); e.stopPropagation(); return closeDate(); }
+  if (!dp.owner && !['Shift', 'Control', 'Alt', 'Meta'].includes(k)) { e.preventDefault(); e.stopPropagation(); }   // 从标题打开时不让别的快捷键穿透
+}, true);
+document.addEventListener('mousedown', (e) => {
+  if (!dp) return;
+  if (e.target.closest('#dp')) return void e.preventDefault();   // 点选择器不抢走输入框的焦点
+  if (!e.target.closest('#title')) closeDate();
+}, true);
+document.addEventListener('focusout', (e) => { if (dp && dp.owner === e.target) closeDate(); });

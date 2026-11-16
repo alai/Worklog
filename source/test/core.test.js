@@ -126,3 +126,25 @@ console.log('ALL OK');
     console.log('workspace locate OK');
   })().catch((e) => { console.error(e); process.exit(1); });
 }
+{ // 删除项目标题块：删的是这一行，不是项目
+  const C = require('../src/core.js'), T = '2026-11-16', S = C.newState();
+  C.loadPage(S, T, '- [[PJ/One]] Project created.\n  - a\n- [[PJ/Two]] Project created.\n  - c\n  - [[PJ/One]]\n    - d\n    - e\n', T); C.settle(S, T); C.ensureIds(S, T, T);
+  const P = C.projects(S), id = (n) => Object.keys(P).find((k) => P[k].name === n), blocks = () => { const o = []; C.eachBlock(S, (b) => o.push(b)); return o; };
+  const head = blocks().find((b) => b.type === 'head');
+  // 标题下自动给的空占位行不算子块
+  const ph = C.newAfter(S, head.children[1].key); if (C.hasContent(ph) || ph.id) throw new Error('placeholder');
+  const r = C.deleteBlock(S, head.key, T);
+  if (!r.ok || !/2 records moved up/.test(r.msg)) throw new Error('head delete: ' + JSON.stringify(r));
+  C.settle(S, T); C.ensureIds(S, T, T);
+  const ix = C.index(S), d = blocks().find((b) => b.text === 'd'), e = blocks().find((b) => b.text === 'e');
+  if (blocks().some((b) => b.type === 'head') || d.own !== id('Two') || e.own !== id('Two')) throw new Error('records should now belong to Two');
+  if (!P[id('One')] || blocks().find((b) => b.text === 'a').own !== id('One')) throw new Error('project One must be untouched');
+  if (blocks().some((b) => b.type === 'ord' && !C.hasContent(b))) throw new Error('placeholder should be gone');
+  const text = C.serializePage(S, T), S2 = C.newState(); C.loadPage(S2, T, text, T); C.settle(S2, T);
+  if (S2.diags.length || C.serializePage(S2, T) !== text) throw new Error('round-trip after head delete: ' + JSON.stringify(S2.diags));
+  // 声明块：只有空占位行时可以删，有真实记录时拒绝
+  const two = ix.byId[id('Two')]; if (C.deleteBlock(S, two.key, T).ok) throw new Error('decl with records must refuse');
+  const S3 = C.newState(); C.loadPage(S3, T, '- [[PJ/Solo]] Project created.\n', T); C.settle(S3, T); C.ensureIds(S3, T, T);
+  const solo = S3.pages[T][0]; C.newAfter(S3, solo.key);
+  console.log('heading delete OK');
+}

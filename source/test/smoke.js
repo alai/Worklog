@@ -161,6 +161,26 @@
       if (readOnly || !q('#banner').hidden) throw new Error('Switching back must keep the workspace writable');
       log.push('workspace locks OK');
     }
+    // date picker
+    const wkey = (k) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+    await go('2031-03-30'); if (act().blur) act().blur(); __writes.length = 0;
+    q('#title').click(); const dpOpen = !q('#dp').hidden, dpTitle = q('.dp-title').textContent, dpOn = q('.dp-day.on').textContent;
+    wkey('ArrowRight'); wkey('ArrowRight'); const rolled = q('.dp-title').textContent; wkey('Enter'); await sleep(80); await saving;
+    log.push('picker title: open=' + dpOpen + ' ' + dpTitle + ' day ' + dpOn + ' | two days right -> ' + rolled + ' | jumped to ' + cur + ' closed=' + q('#dp').hidden + ' | writes=' + __writes.length + ' file=' + __store.has('2031-04-01.md'));
+    press('d'); const dOpen = !q('#dp').hidden; press('j'); const jBlocked = !q('.cur'); wkey('Escape'); log.push('picker D key: open=' + dOpen + ' J blocked=' + jBlocked + ' esc closes=' + q('#dp').hidden + ' still on ' + cur);
+    q('#title').click(); wkey('PageUp'); const hasDot = qa('.dp-day.has').length; qa('.dp-day').find((x) => x.textContent === '15' && !x.classList.contains('out')).click(); await sleep(80);
+    log.push('picker click: page ' + cur + ' | days with records marked in that month: ' + hasDot);
+    await go('2026-11-13'); q('#title').click(); log.push('picker marks: ' + qa('.dp-day.has').map((x) => x.textContent).join(',')); wkey('Escape');
+    // /date in the editor
+    await go('2031-05-05'); q('#add').click(); ta = act();
+    const typeIn = (x) => { const p0 = ta.selectionStart; ta.value = ta.value.slice(0, p0) + x + ta.value.slice(p0); ta.setSelectionRange(p0 + x.length, p0 + x.length); ta.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: x.slice(-1) })); };
+    typeIn('Due /dat'); const early = !q('#dp').hidden; typeIn('e'); const slashOpen = !q('#dp').hidden, focusKept = act() === ta;
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })); ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    const tomorrow = (() => { const d2 = new Date(); d2.setDate(d2.getDate() + 1); return d2.getFullYear() + '-' + p(d2.getMonth() + 1) + '-' + p(d2.getDate()); })();
+    log.push('/date: early=' + early + ' open=' + slashOpen + ' focus kept=' + focusKept + ' -> "' + ta.value.replace(tomorrow, '<tomorrow>') + '" caret at end=' + (ta.selectionStart === ta.value.length) + ' still editing=' + (act() === ta) + ' blocks=' + qa('#editor .row').length);
+    typeIn(' x/date'); const midWord = !q('#dp').hidden; typeIn(' /date'); const again = !q('#dp').hidden; ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    log.push('/date rules: inside a word=' + midWord + ' after space=' + again + ' esc keeps text=' + ta.value.endsWith(' /date') + ' closed=' + q('#dp').hidden + ' still editing=' + (act() === ta));
+    ta.value = ''; ta.dispatchEvent(new Event('input')); ta.blur(); await sleep(50);
     if (window.__final) window.__final();
   } catch (e) { log.push('ERROR ' + e.stack); }
   const out = document.createElement('pre'); out.id = 'SMOKE'; out.textContent = log.join('\n'); document.body.appendChild(out);

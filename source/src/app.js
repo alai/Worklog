@@ -9,7 +9,7 @@ const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 let S = newState(), cur = today(), readOnly = false, rendering = false, ac = null, origin = null;
 let showSide = false, prevLines = new Set(), view = 'journal', viewArg = null;
-const APP_VERSION = '0.3';
+const APP_VERSION = '0.31';
 // 主题机制：一个主题就是 style.css 里一组 :root[data-theme=x] 变量；在这里登记名字即可出现在 Settings
 const THEMES = { light: 'Light', dark: 'Dark' };
 const cfg = { chip: 'date', theme: 'system', nav: 'wide', stale: 7, fold: {}, lifeline: 'text', graphOpen: null, color: 'full' };
@@ -164,7 +164,7 @@ function drawRow(b, parent, ix) {
     view.onclick = (e) => { if (jump(e)) return; focusBlock(b.key, b.text.length); };
     ta.onfocus = () => { row.classList.add('editing'); grow(ta); };
     ta.onblur = (e) => onBlur(e, b, row, parent);
-    ta.oninput = (e) => { if (ta.readOnly) return; pairBrackets(ta, e); b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); };
+    ta.oninput = (e) => { if (ta.readOnly) return; pairBrackets(ta, e); b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); checkDate(ta); };
     ta.addEventListener('keydown', (e) => { if (!ta.readOnly && pairKeys(ta, e)) { b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); } });
     ta.onkeydown = (e) => onKey(e, b, ta);
     body.appendChild(ta);
@@ -292,7 +292,7 @@ function onKey(e, b, ta) {
     if (!hasContent(b) || b.type === 'head') {
       if (order.length === 1) { e.preventDefault(); return; }
       const r = deleteBlock(S, b.key, today()); toast(r.msg);
-      if (r.ok && !r.soft) { const t = order[i - 1] || order[i + 1]; return done(t.key, null); }
+      if (r.ok && !r.soft) { const t = [order[i - 1], ...order.slice(i + 1)].find((x) => x && find(S, x.key)); return done(t && t.key, null); }
       e.preventDefault(); return;
     }
     const r = mergeUp(S, b.key); toast(r.msg);
@@ -487,6 +487,8 @@ async function boot() {
   $('#side-toggle').onclick = () => { showSide = !showSide; $('#side').hidden = !showSide; $('#side-toggle').setAttribute('aria-pressed', String(showSide)); if (showSide) { prevLines = new Set(); updateSide(); } };
   $('#nav-toggle').onclick = () => { cfg.nav = cfg.nav === 'narrow' ? 'wide' : 'narrow'; saveCfg(); drawNav(); };
   $('#help-btn').onclick = () => toggleHelp();
+  // 点日期打开选择器；跳到某一天只是换页，那天写了内容才会生成文件
+  $('#title').onclick = () => { if (dp) return closeDate(); openDate($('#title'), cur, (s) => go(s)); };
   // 搜索：清空搜索框就回到搜索之前所在的页面；Enter 把焦点交还页面（接着用 J/K），Esc 清空并退出
   let qTimer = null, before = null;
   const runSearch = (q) => {
