@@ -1,0 +1,10 @@
+.DS_Store
+/data/
+/backups/
+/source/dist/
+/release/
+/ads/
+/demo-big/
+/.worklog-*/
+*.tgz
+*.zip

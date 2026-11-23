@@ -26,6 +26,8 @@ child.on('error', (e) => finish(2, 'Could not start Chrome (' + chrome + '): ' +
   let id = 0; const pending = new Map();
   ws.onmessage = (m) => { const d = JSON.parse(m.data); if (pending.has(d.id)) { pending.get(d.id)(d.result); pending.delete(d.id); } };
   const send = (method, params = {}) => new Promise((r) => { pending.set(++id, r); ws.send(JSON.stringify({ id, method, params })); });
+  // 无头模式下页面没有窗口焦点，focus/blur 事件不会触发，应用的"退出编辑即提交"就不会执行；打开焦点模拟，行为和真实浏览器一致
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true });
   await send('Page.enable'); await send('Page.navigate', { url });
   for (const t0 = Date.now(); Date.now() - t0 < limit;) {
     await sleep(250);

@@ -22,7 +22,8 @@ ${r('body.html')}<script>
 ${r('core.js')}
 ${r('fs.js')}
 ${r('app.js')}
-${r('views.js')}</script>
+${r('views.js')}
+${r('backup.js')}</script>
 </body>
 </html>
 `;

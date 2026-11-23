@@ -9,20 +9,22 @@ const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 let S = newState(), cur = today(), readOnly = false, rendering = false, ac = null, origin = null;
 let showSide = false, prevLines = new Set(), view = 'journal', viewArg = null;
-const APP_VERSION = '0.31';
-// 主题机制：一个主题就是 style.css 里一组 :root[data-theme=x] 变量；在这里登记名字即可出现在 Settings
+const APP_VERSION = '0.32';
+// 外观由三项组合：THEMES 选亮暗（System 跟随系统），PALETTES 选色板，cfg.color 选着色强度（Full/Soft/Mono）。
+// 登记在这里的名字会自动出现在 Settings；对应的变量写在 style.css
 const THEMES = { light: 'Light', dark: 'Dark' };
-const cfg = { chip: 'date', theme: 'system', nav: 'wide', stale: 7, fold: {}, lifeline: 'text', graphOpen: null, color: 'full' };
+const PALETTES = { default: 'Default', solarized: 'Solarized' };   // 色板：和亮暗独立，style.css 里每个色板各有亮、暗两段
+const cfg = { chip: 'date', theme: 'system', nav: 'wide', stale: 7, fold: {}, lifeline: 'text', graphOpen: null, color: 'full', palette: 'default' };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('worklog-cfg') || '{}')); } catch (e) { /* 忽略 */ }
 function saveCfg() { try { localStorage.setItem('worklog-cfg', JSON.stringify(cfg)); } catch (e) { /* 忽略 */ } applyTheme(); }
 const darkMq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
-function applyTheme() { document.documentElement.dataset.color = cfg.color; document.documentElement.dataset.theme = THEMES[cfg.theme] ? cfg.theme : (darkMq && darkMq.matches ? 'dark' : 'light'); }
+function applyTheme() { const r = document.documentElement; if (PALETTES[cfg.palette] && cfg.palette !== 'default') r.dataset.palette = cfg.palette; else delete r.dataset.palette; r.dataset.color = cfg.color; document.documentElement.dataset.theme = THEMES[cfg.theme] ? cfg.theme : (darkMq && darkMq.matches ? 'dark' : 'light'); }
 if (darkMq) darkMq.addEventListener('change', applyTheme);
 applyTheme();
 const dirty = new Set(), force = new Set();
 let navCur = null, navIdx = null;   // 键盘导航的焦点：Journal 记块的 key，列表页记第几条
 let saveTimer = null, saving = Promise.resolve(), loadInfo = '';
-let workspaceLock = null, openingWorkspace = false;
+let workspaceLock = null, openingWorkspace = false, lockedOut = false;   // lockedOut：另一个标签页占着这个工作区
 
 function toast(msg) {
   if (!msg) return;
@@ -58,7 +60,10 @@ function flush() {
         dirty.delete(date); force.delete(date);
       } catch (e) { banner('Save failed: ' + e.message + '. Your edits are still in the editor.', [['Retry', () => { banner(); flush(); }]]); return; }
     }
-    if (!dirty.size) { const d = new Date(); $('#saved').textContent = `saved ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+    if (!dirty.size) {
+      const d = new Date(); $('#saved').textContent = `saved ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      if (!BK.hold && !lockedOut && FS.data) { BK.remember(FS.files.size, recordCount()); BK.daily(); }   // 跨过午夜一直开着时，第二天的第一次保存补做备份
+    }
     if (showSide) updateSide();
   });
   return saving;
@@ -164,7 +169,7 @@ function drawRow(b, parent, ix) {
     view.onclick = (e) => { if (jump(e)) return; focusBlock(b.key, b.text.length); };
     ta.onfocus = () => { row.classList.add('editing'); grow(ta); };
     ta.onblur = (e) => onBlur(e, b, row, parent);
-    ta.oninput = (e) => { if (ta.readOnly) return; pairBrackets(ta, e); b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); checkDate(ta); };
+    ta.oninput = (e) => { if (ta.readOnly) return; pairBrackets(ta, e); b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); checkDate(ta); checkTag(ta); };
     ta.addEventListener('keydown', (e) => { if (!ta.readOnly && pairKeys(ta, e)) { b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); } });
     ta.onkeydown = (e) => onKey(e, b, ta);
     body.appendChild(ta);
@@ -338,25 +343,37 @@ function checkAc(b, ta) {
     items.push({ act, id: p.id, title: projectPath(P, p.id), sub: { ref: 'Insert reference', head: 'Use as project heading', wrap: 'Move this block into the project' }[act] });
   }
   if (q && !exact && atStart) {
-    if (ctx && P[ctx]) items.push({ act: 'branch', ctx, title: `New branch of ${P[ctx].name}`, sub: q, create: true });
-    items.push({ act: 'proj', title: 'New project', sub: q, create: true });
+    if (ctx && P[ctx]) items.push({ act: 'branch', ctx, title: `New branch of ${P[ctx].name}`, sub: `“${q}”`, create: true });
+    items.push({ act: 'proj', title: 'New project', sub: `“${q}”`, create: true });
   }
   if (!items.length) return closeAc();
   ac = { key: b.key, start, items, sel: 0 };
   drawAc(ta);
 }
-function drawAc(ta) {
-  const box = $('#ac'); box.textContent = '';
-  ac.items.forEach((it, i) => {
-    const btn = el('button', 'ac-item' + (i === ac.sel ? ' on' : '') + (it.create ? ' create' : ''));
-    btn.append(el('span', 'ac-title', it.title), el('span', 'ac-sub', it.sub));
-    btn.onmousedown = (e) => { e.preventDefault(); ac.sel = i; applyAc(ta); };
-    box.appendChild(btn);
+// 补全菜单的公共画法（[[ 项目菜单和 @ / # 补全共用）：单行条目，标题在左、说明在右；
+// 所有条目的说明相同时只在顶部写一次，不逐行重复；下方放不下就放到输入框上方
+function drawMenu(box, ta, rows, sel, onPick) {
+  box.textContent = '';
+  const plain = rows.filter((r) => !r.create), subs = new Set(plain.map((r) => r.sub));
+  const shared = plain.length > 1 && subs.size === 1 ? [...subs][0] : '';   // 新建项各自保留说明
+  if (shared) box.appendChild(el('div', 'ac-head', shared));
+  rows.forEach((it, i) => {
+    const b = el('button', 'ac-item' + (i === sel ? ' on' : '') + (it.create ? ' create' : ''));
+    b.setAttribute('role', 'option'); b.setAttribute('aria-selected', String(i === sel));
+    b.appendChild(el('span', 'ac-title', it.title));
+    if (it.sub && (it.create || !shared)) b.appendChild(el('span', 'ac-sub', it.sub));
+    if (it.tip) b.title = it.tip;
+    b.onmousedown = (e) => { e.preventDefault(); onPick(i); };
+    box.appendChild(b);
   });
-  const r = ta.getBoundingClientRect();
-  box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 400)) + 'px';
-  box.style.top = (r.bottom + 6) + 'px';
   box.hidden = false;
+  const r = ta.getBoundingClientRect(), h = box.offsetHeight, w = box.offsetWidth;
+  box.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+  box.style.top = (r.bottom + h + 8 > innerHeight && r.top > h + 8 ? r.top - h - 4 : r.bottom + 4) + 'px';
+  const on = box.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+}
+function drawAc(ta) {
+  drawMenu($('#ac'), ta, ac.items, ac.sel, (i) => { ac.sel = i; applyAc(ta); });
 }
 // 悬停提示的统一写法：动作或状态，句首大写、不加句号；快捷键放在末尾括号里，多个键用 · 隔开
 function tip(node, text, keys) { node.title = keys ? `${text} (${keys})` : text; node.setAttribute('aria-label', text); return node; }
@@ -460,11 +477,15 @@ async function openWorkspace(select, afterOpen) {
 }
 
 async function start() {
-  readOnly = !await acquireWorkspaceLock();
+  lockedOut = !await acquireWorkspaceLock(); readOnly = lockedOut;
   const t0 = performance.now();
   const pairs = await FS.loadAll(), t1 = performance.now(), back = [];
   $('#gate').hidden = true; $('#app').hidden = false;
-  banner(readOnly ? 'This workspace is open in another tab. This tab is read-only.' : '');
+  // 文件数比上次骤减（比如 data 被空文件夹覆盖了）：先停下来、不写任何东西，让用户决定
+  const prev = lockedOut ? null : BK.check(pairs.length);
+  BK.hold = prev ? { files: pairs.length, prev } : null;
+  if (BK.hold) { readOnly = true; holdBanner(); }
+  else banner(readOnly ? 'This workspace is open in another tab. This tab is read-only.' : '');
   S = newState();
   let n = 0;
   for (const [date, text] of pairs) { if (loadPage(S, date, text, today()).needsWrite) back.push(date); }
@@ -477,6 +498,7 @@ async function start() {
   if (!readOnly) { for (const d of back) if (FS.age(d) > 5000) dirty.add(d); if (dirty.size) flush(); }
   updateIssues();
   await go(cur);
+  if (!BK.hold && !lockedOut) { BK.remember(pairs.length, n); BK.daily(pairs); }   // 每天第一次打开时备份，不阻塞界面
 }
 
 async function boot() {

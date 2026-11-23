@@ -45,9 +45,10 @@ function recLine(b, ix, o = {}) {
   const r = el('div', 'rec' + (b.del ? ' deleted' : '') + (o.stale ? ' stale' : ''));
   r.appendChild(el('span', 'rec-date', o.short ? b.date.slice(5) : b.date));
   if (b.status && !o.noStatus) r.appendChild(el('span', 'status ' + b.status, o.age != null ? `${b.status} · ${o.age}d` : b.status));
-  const t = el('span', 'rec-text');
+  // 日期和状态固定在左侧；正文和项目链在右侧自己的区域里排版，项目链放不下就换到正文下方
+  const body = el('span', 'rec-body'), t = el('span', 'rec-text');
   t.innerHTML = b.type === 'ord' ? b.text.split('\n').map((l) => richLine(l, ix.P, ix.byId)).join('<br>') : `<strong>${esc(b.text)}</strong>`;
-  r.appendChild(t);
+  body.appendChild(t); r.appendChild(body);
   if (o.path && b.own && b.own !== 'INBOX' && ix.P[b.own]) {
     // 项目链只留首尾两级，中间用 … 代替；完整路径放在悬停提示里，点击进入该项目
     const full = projectPath(ix.P, b.own), parts = full.split(' / '), p = el('span', 'rec-path');
@@ -55,7 +56,7 @@ function recLine(b, ix, o = {}) {
     if (parts.length > 1) p.appendChild(el('span', 'up', parts[0] + (parts.length > 2 ? ' / …' : '')));
     p.appendChild(el('span', 'leaf', (parts.length > 1 ? ' / ' : '') + parts[parts.length - 1]));
     p.title = `Open project page · ${full}`; p.dataset.pj = b.own;
-    r.appendChild(p);
+    body.appendChild(p);
   }
   if (o.action) { const x = el('button', 'mini', o.action[0]); x.onclick = (e) => { e.stopPropagation(); o.action[1](); }; r.appendChild(x); }
   const j = openBtn('Open in journal', () => go(b.page, b.key));
@@ -72,14 +73,14 @@ function editRec(r, t, b, o) {
   origin = { key: b.key, status: b.status, date: b.statusDate };
   navIdx = navItems().indexOf(r); setCur(r);
   r.classList.add('editing'); t.textContent = ''; t.appendChild(ta); grow(ta);
-  ta.oninput = () => { grow(ta); checkDate(ta); };
+  ta.oninput = () => { grow(ta); checkDate(ta); checkTag(ta); };
   ta.onkeydown = (e) => {
     if (e.isComposing) return;
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {   // 和 Journal 一样循环切换状态
       e.preventDefault();
       if (!cycle(b)) return;
       const old = r.querySelector('.status'), chip = b.status ? el('span', 'status ' + b.status, b.status) : null;
-      if (old && chip) old.replaceWith(chip); else if (old) old.remove(); else if (chip) r.insertBefore(chip, t);
+      if (old && chip) old.replaceWith(chip); else if (old) old.remove(); else if (chip) r.insertBefore(chip, t.parentNode);
     } else if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); ta.blur(); }
   };
   ta.onblur = () => {
@@ -141,7 +142,9 @@ function pjHead(id, st, ix, folded, onFold, count) {
   head.appendChild(name);
   if (folded && count) head.appendChild(el('span', 'pj-count', `(${p.subEvents})`));
   const m = [`(${p.days}) days`]; if (p.subTodo) m.push(`(${p.subTodo}) todos`); if (p.subWait) m.push(`(${p.subWait}) waiting`);
-  head.append(el('span', 'pj-meta', m.join(' · ')), el('span', 'cap ' + p.status, p.status), openBtn('Open project page', () => show('project', id), 'in'));
+  const tail = el('span', 'pj-tail');   // 胶囊和平时隐藏的打开图标绑在一起换行，免得图标单独占一行留下空白
+  tail.append(el('span', 'cap ' + p.status, p.status), openBtn('Open project page', () => show('project', id), 'in'));
+  head.append(el('span', 'pj-meta', m.join(' · ')), tail);
   const parentClosed = p.type === 'branch' && st.N[p.parent] && st.N[p.parent].closed;
   if (!readOnly && !parentClosed) { const a = el('button', 'mini act', p.life ? (p.type === 'proj' ? 'Restore' : 'Reopen') : (p.type === 'proj' ? 'Archive' : 'Complete')); a.onclick = () => life(id); head.append(el('span', 'grow'), a); }
   return head;
@@ -166,7 +169,8 @@ function drawProject(id, st, ix, top) {
 function subtree(id, st, out = [], depth = 0) { out.push([id, depth]); if (depth < 30) for (const k of st.N[id].kids) subtree(k, st, out, depth + 1); return out; }
 function drawGraph(id, st, W) {
   const t = today(), root = st.N[id], lanes = subtree(id, st), end = root.life || t, span = Math.max(1, daysBetween(root.date, end));
-  const L = 220, R = 170, TOP = 26, H = 30, x0 = L, x1 = Math.max(L + 200, W - R), h = TOP + lanes.length * H + 8;
+  const metaLen = Math.max(0, ...lanes.map(([pid]) => { const p = st.N[pid]; return (p.todo ? 10 : 0) + (p.wait ? 12 : 0) + (p.todo && p.wait ? 3 : 0); }));
+  const L = Math.round(Math.min(220, W * 0.3)), R = Math.round(Math.min(190, Math.max(40, metaLen * 6 + 24))), TOP = 26, H = 30, x0 = L, x1 = Math.max(L + 160, W - R), h = TOP + lanes.length * H + 8;
   const x = (d) => x0 + Math.min(1, Math.max(0, daysBetween(root.date, d) / span)) * (x1 - x0);
   const step = [1, 2, 7, 14, 30, 60, 90, 180, 365].find((s) => span / s <= 8) || 730, row = new Map();
   let g = '';
@@ -182,7 +186,8 @@ function drawGraph(id, st, W) {
     if (i) g += `<path class="g-line" d="M${a} ${row.get(p.parent)}V${y}"/>`;
     g += `<line class="g-line${p.life ? ' done' : ''}" x1="${a}" y1="${y}" x2="${Math.max(b, a + 2)}" y2="${y}"/>`;
     if (p.life) g += `<rect class="g-end" x="${b - 1.5}" y="${y - 6}" width="3" height="12" rx="1"/>`;
-    g += `<text class="g-name${i ? '' : ' main'}" data-pj="${pid}" x="${8 + depth * 14}" y="${y + 4}">${esc(p.name.length > 22 - depth * 2 ? p.name.slice(0, 21 - depth * 2) + '…' : p.name)}</text>`;
+    const fit = Math.max(6, Math.floor((L - 16 - depth * 14) / 7.2));   // 按标签栏的实际宽度截断
+    g += `<text class="g-name${i ? '' : ' main'}" data-pj="${pid}" x="${8 + depth * 14}" y="${y + 4}"><title>${esc(projectPath(index(S).P, pid))}</title>${esc(p.name.length > fit ? p.name.slice(0, fit - 1) + '…' : p.name)}</text>`;
     const m = []; if (p.todo) m.push(`(${p.todo}) todos`); if (p.wait) m.push(`(${p.wait}) waiting`);
     g += `<text class="g-meta" x="${x1 + 14}" y="${y + 4}">${m.join(' · ')}</text>`;
     for (const e of p.events) { const l = days.get(e.date); if (l) l.push(e); else days.set(e.date, [e]); }
@@ -205,7 +210,7 @@ function drawProjectPage(root, id, st, ix) {
   const head = pjHead(id, st, ix, false, null, false), decl = el('button', 'mini', 'Open in journal');
   head.classList.add('page'); head.querySelector('.goto').remove(); decl.onclick = () => go(p.date, ix.byId[id].key); head.append(decl, sortBtn('pageOrder', true));
   root.appendChild(head);
-  root.appendChild(drawGraph(id, st, Math.max(640, root.clientWidth - 48)));
+  root.appendChild(drawGraph(id, st, Math.max(440, root.clientWidth - 48)));
   const ids = subtree(id, st).map((x) => x[0]), recs = [];
   for (const k of ids) for (const b of ix.byProj.get(k) || []) if (!b.del) recs.push(b);
   const pageNew = newest('pageOrder', true), open = recs.filter((b) => b.status === 'TODO' || b.status === 'WAIT').sort(byStart(pageNew));
@@ -225,7 +230,7 @@ function drawProjectPage(root, id, st, ix) {
 function groupBtn(key) {
   const g = el('button', 'icon-btn grp');
   g.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3" width="5" height="3.4" rx="1" fill="currentColor"/><path d="M6 9h11M6 12.2h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/><rect x="2.5" y="14.6" width="5" height="3.4" rx="1" fill="currentColor"/><path d="M10 4.7h7M10 16.3h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
-  tip(g, 'Group by project', 'G'); g.setAttribute('aria-pressed', String(!!cfg[key]));
+  tip(g, 'Group by project', 'P'); g.setAttribute('aria-pressed', String(!!cfg[key]));
   g.onclick = () => { cfg[key] = !cfg[key]; saveCfg(); drawView(); };
   return g;
 }
@@ -239,8 +244,17 @@ function drawGroups(root, list, st, ix, opt) {
     const fk = view + ':' + (viewArg || '') + ':' + k, folded = grpFold.has(fk), h = el('h3', 'group grp-head'), items = groups.get(k), f = foldBtn(folded);
     f.setAttribute('aria-expanded', String(!folded));
     h.appendChild(f);
-    if (k === 'INBOX') h.appendChild(el('span', null, 'Inbox')); else { const b = el('button', 'pj-name', projectPath(ix.P, k)); b.onclick = () => show('project', k); h.appendChild(b); }
-    h.appendChild(el('span', 'pj-meta', `(${items.length})`));
+    const lab = el('span', 'grp-label');
+    if (k === 'INBOX') lab.appendChild(el('span', null, 'Inbox'));
+    else {   // 上级路径浅色，末级加粗；整段可以换行，条数跟在最后一个字后面
+      const parts = projectPath(ix.P, k).split(' / '), b = el('button', 'pj-name');
+      if (parts.length > 1) b.appendChild(el('span', 'up', parts.slice(0, -1).join(' / ') + ' / '));
+      b.appendChild(document.createTextNode(parts[parts.length - 1]));
+      b.appendChild(el('span', 'pj-meta', `(${items.length})`));
+      b.onclick = () => show('project', k); lab.appendChild(b);
+    }
+    if (k === 'INBOX') lab.appendChild(el('span', 'pj-meta', ` (${items.length})`));
+    h.appendChild(lab);
     if (k !== 'INBOX') h.appendChild(openBtn('Open project page', () => show('project', k), 'in'));
     h.onclick = (e) => { if (e.target.closest('.pj-name,.goto')) return; if (folded) grpFold.delete(fk); else grpFold.add(fk); drawView(); };
     root.appendChild(h);
@@ -259,6 +273,7 @@ function seg(label, key, options) {
 function drawSettings(root) {
   root.appendChild(seg('Status label', 'chip', [['date', 'Date'], ['days', 'Days'], ['none', 'None']]));
   root.appendChild(seg('Theme', 'theme', [['system', 'System'], ...Object.entries(THEMES)]));
+  root.appendChild(seg('Palette', 'palette', Object.entries(PALETTES)));
   root.appendChild(seg('Color style', 'color', [['full', 'Full'], ['soft', 'Soft'], ['mono', 'Mono']]));
   const row = el('div', 'set-row'), n = el('input'); n.type = 'number'; n.min = 1; n.max = 365; n.value = cfg.stale; n.id = 'stale';
   const lab = el('label', 'set-label', 'Stale after (days)'); lab.htmlFor = 'stale';
@@ -267,6 +282,9 @@ function drawSettings(root) {
   const ws = el('div', 'set-row'), ch = el('button', 'btn', 'Change folder');
   ch.onclick = () => openWorkspace(() => FS.pick());
   ws.append(el('span', 'set-label', 'Workspace'), el('span', 'chip', FS.where), ch); root.appendChild(ws);
+  const bx = el('div', 'set-row'), ex = el('button', 'btn', 'Export backup');
+  ex.onclick = async () => { ex.disabled = true; try { toast('Saved ' + await BK.exportFile() + ' to your downloads'); } catch (e) { toast('Export failed: ' + e.message); } ex.disabled = false; };
+  bx.append(el('span', 'set-label', 'Backup'), el('span', 'bk-note', `Daily, latest ${BK.KEEP} kept, in ${BK.where()}`), ex); root.appendChild(bx);
   root.appendChild(el('h2', null, 'About'));
   for (const [k, val] of [['Version', APP_VERSION], ['Data format', 'worklog-schema ' + SCHEMA], ['Storage', 'Plain text files on this computer. Nothing is sent anywhere.'], ['License', 'MIT License. Free to use and modify, no warranty.']]) {
     const r = el('div', 'set-row'); r.append(el('span', 'set-label', k), el('span', 'set-val', val)); root.appendChild(r);
@@ -289,7 +307,7 @@ function drawViewBody() {
       h1.appendChild(g);
       if (cfg.lifeline !== 'graph') h1.appendChild(sortBtn('projOrder', false));
       if (cfg.lifeline === 'graph') {
-        const openId = cfg.graphOpen === '-' ? null : ids.includes(cfg.graphOpen) ? cfg.graphOpen : ids[0], W = Math.max(640, root.clientWidth - 48);
+        const openId = cfg.graphOpen === '-' ? null : ids.includes(cfg.graphOpen) ? cfg.graphOpen : ids[0], W = Math.max(440, root.clientWidth - 48);
         for (const id of ids) {
           const node = el('div', 'pj top acc'), isOpen = id === openId;
           node.appendChild(pjHead(id, st, ix, !isOpen, () => { cfg.graphOpen = isOpen ? '-' : id; saveCfg(); drawView(); }, true));
@@ -338,6 +356,7 @@ function drawViewBody() {
     root.appendChild(el('h2', null, `Deleted records (${dels.length})`));
     if (!dels.length) root.appendChild(empty('None.'));
     for (const b of dels) root.appendChild(recLine(b, ix, { path: true, action: readOnly ? null : ['Restore', () => { b.del = null; bump(S); touch(true, b.page); drawView(); }] }));
+    drawBackups(root);
     root.appendChild(el('h2', null, 'Workspace'));
     const row = el('div', 'set-row'), re = el('button', 'btn', 'Rescan workspace');
     re.onclick = () => openWorkspace(() => true, () => { show('issues'); toast('Workspace rescanned'); });
@@ -358,10 +377,10 @@ function markCur() {   // 重画之后把焦点标回去
   if (n) n.classList.add('cur');
 }
 const KEYS = [
-  ['Move', [['J  ↓', 'Next item'], ['K  ↑', 'Previous item'], ['Shift+J  Ctrl+J', 'Next project heading'], ['Shift+K  Ctrl+K', 'Previous project heading']]],
-  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['G', 'Group by project (Working, tags)'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['D', 'Pick a date (journal)'], ['?', 'This help']]],
+  ['Move', [['J  ↓', 'Next item'], ['K  ↑', 'Previous item'], ['Shift+J  Ctrl+J', 'Next project heading'], ['Shift+K  Ctrl+K', 'Previous project heading'], ['g g', 'First item'], ['Shift+G', 'Last item'], ['Shift+M', 'Middle of the visible screen']]],
+  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['P', 'Group by project (Working, tags)'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['D', 'Pick a date (journal)'], ['?', 'This help']]],
   ['Go to', NAV.map(([, label], i) => [`${i + 1}  Ctrl+Shift+${label[0]}`, label])],
-  ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['Alt+Shift+↑↓', 'Move block (journal)'], ['[[', 'Project menu (journal)'], ['/date', 'Insert a date from the calendar']]]
+  ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['Alt+Shift+↑↓', 'Move block (journal)'], ['[[', 'Project menu (journal)'], ['@  #', 'Suggest existing names and tags'], ['/date', 'Insert a date from the calendar']]]
 ];
 function toggleHelp() {
   const d = $('#help');
@@ -378,6 +397,7 @@ function toggleHelp() {
   d.appendChild(grid);
   d.showModal();
 }
+let lastG = 0;   // gg：两次 g 的间隔在 600 ms 内才算
 function navKey(e) {
   if (dp) return;   // 日期选择器开着时，键盘归它
   if (openingWorkspace || $('#app').hidden || e.metaKey || e.altKey || e.isComposing) return;
@@ -400,6 +420,7 @@ function navKey(e) {
     if (cfg.nav === 'narrow') { cfg.nav = 'wide'; saveCfg(); drawNav(); }
     $('#q').focus(); $('#q').select(); return;
   }
+  if (L !== 'G' && !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) lastG = 0;   // 中间按了别的键，gg 就不算
   const down = L === 'J' || e.key === 'ArrowDown', up = L === 'K' || e.key === 'ArrowUp';
   const items = navItems(), i = items.findIndex((x) => x.classList.contains('cur')), cur = items[i];
   const move = (n) => {
@@ -418,10 +439,25 @@ function navKey(e) {
     return move(n);
   }
   if (down || up) { if (items.length) move(i < 0 ? 0 : Math.max(0, Math.min(items.length - 1, i + (down ? 1 : -1)))); return; }
+  // vim 的习惯：g g 第一项，Shift+G 最后一项，Shift+M 当前屏幕中间的那一项
+  if (L === 'G' && !e.ctrlKey) {
+    e.preventDefault();
+    const box = $(view === 'journal' ? '#editor-wrap' : '#view');   // 连页面标题一起滚到最顶 / 最底，而不只是让那一项露出来
+    if (e.shiftKey) { lastG = 0; if (items.length) { move(items.length - 1); box.scrollTop = box.scrollHeight; } return; }
+    if (Date.now() - lastG < 600) { lastG = 0; if (items.length) { move(0); box.scrollTop = 0; } } else lastG = Date.now();
+    return;
+  }
+  if (L === 'M' && e.shiftKey && !e.ctrlKey) {
+    e.preventDefault();
+    const box = $(view === 'journal' ? '#editor-wrap' : '#view').getBoundingClientRect(), mid = box.top + box.height / 2;
+    let best = -1, dist = Infinity;
+    items.forEach((x, n) => { const r = x.getBoundingClientRect(); if (r.bottom < box.top || r.top > box.bottom) return; const d = r.top <= mid && r.bottom >= mid ? 0 : Math.min(Math.abs(r.top - mid), Math.abs(r.bottom - mid)); if (d < dist) { dist = d; best = n; } });
+    return move(best);
+  }
   if (L === 'D' && view === 'journal' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#title').click(); }
   if (L === 'F' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#nav-toggle').click(); }
   if (L === 'S' && view !== 'journal') { const g = $('#view .icon-btn.sort'); if (g) { e.preventDefault(); g.click(); } return; }
-  if (L === 'G' && view !== 'journal') { const g = $('#view .icon-btn.grp'); if (g) { e.preventDefault(); g.click(); } return; }
+  if (L === 'P' && !e.ctrlKey && !e.shiftKey && view !== 'journal') { const g = $('#view .icon-btn.grp'); if (g) { e.preventDefault(); g.click(); } return; }
   if (e.key === 'Escape') { if (cur) { navIdx = null; navCur = null; setCur(null); } return; }
   if (!cur || tag === 'BUTTON' && e.key === 'Enter') return;
   if (e.key === 'Enter') {
@@ -502,3 +538,50 @@ document.addEventListener('mousedown', (e) => {
   if (!e.target.closest('#title')) closeDate();
 }, true);
 document.addEventListener('focusout', (e) => { if (dp && dp.owner === e.target) closeDate(); });
+
+// ---- @人名 / #类型 自动补全：@ 或 # 后打出第一个字符，就列出已有的名字，避免同一个人写成几种拼法 ----
+// 只补全，不限制：列表里没有的名字照样可以写，算作新名字
+let tagAc = null;
+const BARE_TAG = /^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$/;   // 和内核 TAG_RE 的不带括号写法一致
+const tagText = (sig, name) => sig + (BARE_TAG.test(name) ? name : `{${name}}`);   // 写进文件的样子
+function closeTag() { if (!tagAc) return; tagAc = null; $('#tac').hidden = true; }
+function checkTag(ta) {
+  const p = ta.selectionStart, upto = ta.value.slice(0, p);
+  // 行首或非字母数字之后的 @ / #，后面至少一个字符；@{… 是带空格名字的写法，括号闭合前都算在查询里
+  const m = p === ta.selectionEnd && upto.match(/(?<![A-Za-z0-9\\])([@#])(?:\{([^}\n]*)|([^\s@#{}\[\]()]+))$/);
+  const q = m && (m[2] != null ? m[2] : m[3]);
+  if (!m || !q || !q.trim()) return closeTag();
+  const sig = m[1], nq = q.toLowerCase(), hits = [];
+  for (const [tag, ids] of index(S).tags) {
+    if (tag[0] !== sig) continue;
+    const name = tag.slice(1), n = name.toLowerCase();
+    // 先比整体前缀，再比名字里每个词的前缀（Wei 能找到 Li Wei），最后是任意位置
+    const rank = n === nq ? 0 : n.startsWith(nq) ? 1 : n.split(/[\s._-]+/).some((w) => w.startsWith(nq)) ? 2 : n.includes(nq) ? 3 : -1;
+    if (rank >= 0) hits.push({ name, rank, count: new Set(ids).size });
+  }
+  hits.sort((a, b) => a.rank - b.rank || b.count - a.count || a.name.localeCompare(b.name));
+  // 已经一字不差地写对、又没有别的候选时，不弹菜单，免得拦住回车
+  if (!hits.length || (hits.length === 1 && m[2] == null && hits[0].name === q)) return closeTag();
+  tagAc = { ta, start: p - m[0].length, sig, items: hits.slice(0, 8), sel: 0 };
+  drawTag();
+}
+function drawTag() {
+  const { ta, items, sel, sig } = tagAc;
+  drawMenu($('#tac'), ta, items.map((it) => ({ title: sig + it.name, sub: String(it.count), tip: `${it.count} ${it.count === 1 ? 'record' : 'records'}` })), sel, (i) => { tagAc.sel = i; applyTag(); });
+}
+function applyTag() {
+  const { ta, start, sig, items, sel } = tagAc, it = items[sel], p = ta.selectionStart, v = ta.value;
+  closeTag();
+  const next = v[p], ins = tagText(sig, it.name) + (next && /\s/.test(next) ? '' : ' ');   // 后面不是空白就补一个空格，接着打字；行尾多出的空格保存时会去掉
+  ta.value = v.slice(0, start) + ins + v.slice(p);
+  ta.setSelectionRange(start + ins.length, start + ins.length);
+  ta.dispatchEvent(new Event('input'));
+}
+window.addEventListener('keydown', (e) => {
+  if (!tagAc || e.isComposing || e.target !== tagAc.ta) return;
+  const k = e.key, n = tagAc.items.length;
+  if (k === 'ArrowDown' || k === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); tagAc.sel = (tagAc.sel + (k === 'ArrowDown' ? 1 : n - 1)) % n; return drawTag(); }
+  if ((k === 'Enter' || k === 'Tab') && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); e.stopPropagation(); return applyTag(); }
+  if (k === 'Escape') { e.preventDefault(); e.stopPropagation(); return closeTag(); }   // 只关菜单，不退出编辑
+}, true);
+document.addEventListener('focusout', (e) => { if (tagAc && tagAc.ta === e.target) closeTag(); });

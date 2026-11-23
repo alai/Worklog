@@ -1,9 +1,85 @@
-/* 主题 = 一组变量。新增主题：复制一段 :root[data-theme=…]，再到 app.js 的 THEMES 里登记名字 */
+/* 色板 = 一组变量，亮色、暗色各一段。新增色板：照下面 Solarized 的写法加两段 :root[data-palette=…][data-theme=light|dark]，再到 app.js 的 PALETTES 里登记名字 */
 :root,:root[data-theme=light]{--bg:#fff;--panel:#fff;--ink:#1C2024;--ink2:#3A434C;--muted:#5B6570;--faint:#8A939D;--line:#E3E6EA;--line2:#C9CED4;--soft:#F6F7F9;--accent:#2459D6;--on:#fff;--edit:#F3F6FE;--kind0:#6B3FA0;
 --todo-bg0:#E4ECFD;--todo0:#1B47B5;--wait-bg0:#FCEBD3;--wait0:#8A4B00;--done-bg:#E6EAEE;--done:#4A545E;--warn-bg:#FFF1C7;--warn:#6B4E00;--err-bg:#FDE3E1;--err:#9B1C13;--ok-bg0:#DDF3E4;--ok0:#17603A;--shadow:rgba(28,32,36,.14);
 --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color-scheme:light}
 :root[data-theme=dark]{--bg:#15181C;--panel:#1C2025;--ink:#E6E9EC;--ink2:#C3C9CF;--muted:#98A2AC;--faint:#6F7882;--line:#2B3138;--line2:#3B434C;--soft:#1C2025;--accent:#7AA2FF;--on:#15181C;--edit:#1D2638;--kind0:#C3A0F0;
 --todo-bg0:#1E2C4D;--todo0:#A9C2FF;--wait-bg0:#41301A;--wait0:#F2C078;--done-bg:#2A3038;--done:#A6AFB8;--warn-bg:#40361A;--warn:#F0D684;--err-bg:#472220;--err:#FFB1AA;--ok-bg0:#1B3A29;--ok0:#8ED8A9;--shadow:rgba(0,0,0,.5);color-scheme:dark}
+/* 配色 Solarized（Ethan Schoonover，https://ethanschoonover.com/solarized/）。配色和亮暗是两回事：
+   data-palette 选色板，data-theme 选亮或暗，两者组合；选择器带上 palette，优先级高于上面的默认色板 */
+:root[data-palette=solarized] {
+  --base03: #002b36;
+  --base02: #073642;
+  --base01: #586e75;
+  --base00: #657b83;
+  --base0: #839496;
+  --base1: #93a1a1;
+  --base2: #eee8d5;
+  --base3: #fdf6e3;
+  --blue: #268bd2;
+  --violet: #6c71c4;
+  --yellow: #b58900;
+  --orange: #cb4b16;
+  --red: #dc322f;
+  --green: #859900;
+}
+:root[data-palette=solarized][data-theme=light] {
+  --bg: var(--base3);
+  --panel: color-mix(in srgb, var(--base3) 84%, white);
+  --soft: var(--base2);
+  --ink: var(--base02);
+  --ink2: var(--base01);
+  --muted: var(--base01);
+  --faint: color-mix(in srgb, var(--base00) 83%, var(--base02));
+  --on: var(--base3);
+  --line: color-mix(in srgb, var(--base2) 83%, var(--base01));
+  --line2: color-mix(in srgb, var(--base2) 62%, var(--base01));
+  --accent: color-mix(in srgb, var(--blue) 71%, var(--base03));
+  --edit: color-mix(in srgb, var(--base3) 89%, var(--blue));
+  --kind0: color-mix(in srgb, var(--violet) 77%, var(--base03));
+  --todo-bg0: color-mix(in srgb, var(--base3) 86%, var(--blue));
+  --todo0: color-mix(in srgb, var(--blue) 52%, var(--base03));
+  --wait-bg0: color-mix(in srgb, var(--base3) 80%, var(--yellow));
+  --wait0: color-mix(in srgb, var(--yellow) 55%, var(--base03));
+  --done-bg: color-mix(in srgb, var(--base3) 82%, var(--base1));
+  --done: var(--base01);
+  --warn-bg: color-mix(in srgb, var(--base3) 76%, var(--yellow));
+  --warn: color-mix(in srgb, var(--yellow) 49%, var(--base03));
+  --err-bg: color-mix(in srgb, var(--base3) 86%, var(--red));
+  --err: color-mix(in srgb, var(--red) 62%, var(--base03));
+  --ok-bg0: color-mix(in srgb, var(--base3) 82%, var(--green));
+  --ok0: color-mix(in srgb, var(--green) 52%, var(--base03));
+  --shadow: rgba(0,43,54,.14);
+  color-scheme: light;
+}
+:root[data-palette=solarized][data-theme=dark] {
+  --bg: var(--base03);
+  --panel: color-mix(in srgb, var(--base03) 40%, var(--base02));
+  --soft: var(--base02);
+  --ink: #cbd1c2;
+  --ink2: var(--base1);
+  --muted: var(--base1);
+  --faint: color-mix(in srgb, var(--base0) 87%, var(--base2));
+  --on: var(--base03);
+  --line: color-mix(in srgb, var(--base02) 73%, var(--base0));
+  --line2: color-mix(in srgb, var(--base02) 58%, var(--base0));
+  --accent: color-mix(in srgb, var(--blue) 68%, var(--base3));
+  --edit: color-mix(in srgb, var(--base03) 82%, var(--blue));
+  --kind0: color-mix(in srgb, var(--violet) 63%, var(--base3));
+  --todo-bg0: color-mix(in srgb, var(--base02) 83%, var(--blue));
+  --todo0: color-mix(in srgb, var(--blue) 56%, var(--base3));
+  --wait-bg0: color-mix(in srgb, var(--base03) 77%, var(--yellow));
+  --wait0: color-mix(in srgb, var(--yellow) 61%, var(--base3));
+  --done-bg: color-mix(in srgb, var(--base03) 71%, var(--base0));
+  --done: color-mix(in srgb, var(--base1) 80%, var(--base2));
+  --warn-bg: color-mix(in srgb, var(--base03) 75%, var(--yellow));
+  --warn: color-mix(in srgb, var(--yellow) 52%, var(--base3));
+  --err-bg: color-mix(in srgb, var(--base03) 75%, var(--red));
+  --err: color-mix(in srgb, var(--red) 47%, var(--base3));
+  --ok-bg0: color-mix(in srgb, var(--base03) 78%, var(--green));
+  --ok0: color-mix(in srgb, var(--green) 58%, var(--base3));
+  --shadow: rgba(0,15,19,.55);
+  color-scheme: dark;
+}
 /* 颜色风格：只管着色的文字和标签（人名、类型、状态、项目引用、胶囊），不动背景和界面本身 */
 :root{--person:var(--accent);--kind:var(--kind0);--todo:var(--todo0);--todo-bg:var(--todo-bg0);--wait:var(--wait0);--wait-bg:var(--wait-bg0);--ok:var(--ok0);--ok-bg:var(--ok-bg0);--done-fg:var(--done);--done-chip:var(--done-bg);--tagw:400}
 :root[data-color=soft]{--person:color-mix(in srgb,var(--accent) 45%,var(--muted));--kind:color-mix(in srgb,var(--kind0) 45%,var(--muted));--todo:color-mix(in srgb,var(--todo0) 50%,var(--muted));--todo-bg:color-mix(in srgb,var(--todo-bg0) 45%,var(--soft));--wait:color-mix(in srgb,var(--wait0) 50%,var(--muted));--wait-bg:color-mix(in srgb,var(--wait-bg0) 45%,var(--soft));--ok:color-mix(in srgb,var(--ok0) 50%,var(--muted));--ok-bg:color-mix(in srgb,var(--ok-bg0) 45%,var(--soft))}
@@ -89,11 +165,18 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 .mini.del{opacity:0;border-color:transparent;color:var(--muted)}
 .row:hover .mini.del,.row.editing .mini.del,.mini.del:focus{opacity:1;border-color:var(--line)}
 #add{margin:10px 0 0 8px;border:1px dashed var(--line2);background:var(--panel);color:var(--muted);border-radius:8px;padding:4px 12px;font-size:13px}
-#ac{position:fixed;z-index:20;width:380px;max-width:calc(100vw - 16px);background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 8px 24px var(--shadow);padding:6px;display:flex;flex-direction:column;gap:2px}
-.ac-item{display:flex;flex-direction:column;align-items:flex-start;text-align:left;border:0;border-radius:6px;background:var(--panel);padding:6px 10px}
-.ac-item.create{border-top:1px solid var(--line);border-radius:0 0 6px 6px}
-.ac-item.on{background:var(--ink);color:var(--on)}
-.ac-title{font-weight:600}.ac-sub{font-size:13px;color:var(--muted)}.ac-item.on .ac-sub{color:var(--on)}
+/* 补全菜单：和列表行同样紧凑——单行 26px、13px 字、选中用浅底色而不是反色 */
+#ac,#tac{position:fixed;z-index:20;min-width:200px;max-width:min(360px,calc(100vw - 16px));max-height:252px;overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:8px;box-shadow:0 6px 18px var(--shadow);padding:3px;display:flex;flex-direction:column}
+.ac-head{font-size:11px;color:var(--faint);padding:3px 8px 2px}
+.ac-item{flex:none;display:flex;align-items:center;gap:12px;height:26px;padding:0 8px;border:0;border-radius:5px;background:transparent;font-size:13px;text-align:left;color:var(--ink);cursor:pointer}
+.ac-item:hover{background:color-mix(in srgb,var(--line) 55%,transparent)}
+.ac-item.on{background:var(--line)}
+.ac-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac-sub{flex:none;font-size:11px;color:var(--faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+.ac-item.create .ac-title{color:var(--muted)}
+.ac-item.create .ac-title::before{content:"+ "}
+.ac-item:not(.create)+.ac-item.create{margin-top:4px;position:relative}
+.ac-item:not(.create)+.ac-item.create::after{content:"";position:absolute;left:4px;right:4px;top:-3px;border-top:1px solid var(--line)}
 #raw{margin:0;font-family:var(--mono);font-size:12px;line-height:1.75;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-all}
 .ln .meta{color:var(--faint)}
 .ln.chg{animation:flash 2.4s ease-out}
@@ -103,16 +186,20 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 #view h1{margin:0 0 14px;font-size:17px;font-weight:600}
 #view h2{margin:22px 0 8px;font-size:12px;font-weight:600;color:var(--muted)}
 .empty{color:var(--faint);font-size:13px;margin:4px 0}
-.rec{position:relative;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 10px;padding:2px 32px 2px 6px;border-radius:6px;cursor:pointer}
+.rec{position:relative;display:flex;align-items:baseline;gap:0 10px;padding:2px 32px 2px 6px;border-radius:6px;cursor:pointer}
 .rec:hover,.rec.cur,.row.cur,.pj-head.cur,.grp-head.cur{background:var(--soft)}
 .pj-head.cur .fold,.grp-head.cur .fold{background:var(--line);color:var(--ink)}
 .row.cur.editing,.rec.cur.editing{background:var(--edit)}
 .rec .status{margin:0;font-size:11px;padding:1px 7px}
 .rec-date{font-family:var(--mono);font-size:12px;color:var(--faint);flex:none}
-.rec-text{flex:1 1 7em;min-width:0;word-break:break-word}
+/* 正文至少占右侧区域的 60%；项目链放不下时整体换到正文下方（右对齐），不去挤正文 */
+.rec-body{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 10px}
+.rec-text{flex:1 1 60%;min-width:0;word-break:break-word}
 .rec-path{display:flex;flex:0 1 auto;min-width:0;max-width:100%;margin-left:auto;font-size:12px;color:var(--faint);white-space:pre;cursor:pointer}
-.rec-path .up{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.rec-path .leaf{flex:0 1 auto;min-width:3em;overflow:hidden;text-overflow:ellipsis}
+/* 宽度不够时先截上级：上级收缩系数极大，缩到最短之后才轮到末级。末级系数取 1 而不是更小——
+   系数总和小于 1 时浏览器只收掉一部分溢出，名称会撑出列外 */
+.rec-path .up{flex:0 10000 auto;min-width:1.5em;overflow:hidden;text-overflow:ellipsis}
+.rec-path .leaf{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .rec-path:hover{color:var(--ink2);text-decoration:underline}
 .rec.editable{cursor:text}
 .rec.editing{background:var(--edit);outline:2px solid var(--accent)}
@@ -128,7 +215,7 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 .col{min-width:0}
 .col h2{margin-top:0!important}
 .pj.top{margin-bottom:18px}
-.pj-head{display:flex;align-items:center;gap:8px;padding:2px 6px 2px 2px;border-radius:8px;min-height:30px}
+.pj-head{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;padding:2px 6px 2px 2px;border-radius:8px;min-height:30px}
 .pj-head.foldable{cursor:pointer}
 .pj-head.foldable:hover{background:var(--soft)}
 .pj-head.foldable:hover .fold{background:var(--line);color:var(--ink)}
@@ -139,12 +226,17 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 .pj-name{border:0;background:transparent;padding:0;font-weight:600;text-align:left}
 .pj-name:hover{text-decoration:underline}
 .pj-count{font-weight:600}
-.pj-meta{font-size:11px;color:var(--faint)}
+.pj-meta{font-size:11px;color:var(--faint);white-space:nowrap}
+.pj-head .mini,.pj-head .cap,.pj-count{white-space:nowrap}
+.pj-tail{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.pj-head:not(.page) .pj-name{max-width:calc(100% - 32px)}   /* 名字太长时在折叠箭头旁边折行，而不是把箭头单独留在一行 */
 .cap{font-size:10px;border-radius:9px;padding:0 7px;line-height:16px}
 .cap.ongoing{background:var(--wait-bg);color:var(--wait)}.cap.ready{background:var(--done-bg);color:var(--done)}.cap.completed{background:var(--ok-bg);color:var(--ok)}.cap.archived{background:var(--done-bg);color:var(--done)}
 .mini.act{opacity:0;margin:0;border-color:transparent;background:transparent;color:var(--faint);font-size:11px}
 .mini.act:hover{border-color:var(--line2);color:var(--ink);background:var(--panel)}
 .pj-head:hover .mini.act,.mini.act:focus{opacity:1}
+.pj-head:not(.page){padding-right:84px}
+.pj-head:not(.page) .mini.act{position:absolute;right:6px;top:50%;transform:translateY(-50%)}
 .pj-body{margin-left:13px;padding:2px 0 2px 14px;border-left:1px solid var(--line2)}
 .pj-body>.pj{margin-top:4px}
 .more{border:0;background:transparent;color:var(--faint);font-size:12px;padding:0 6px}
@@ -177,7 +269,7 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 .g-dot:hover{fill:var(--person)}
 .crumb{font-size:12px;color:var(--faint);margin-bottom:4px}
 .link{border:0;background:transparent;padding:0;color:var(--muted);font-size:12px}.link:hover{text-decoration:underline}
-.pj-head.page{margin-bottom:10px;padding-left:0}.pj-head.page .pj-name{font-size:17px}.pj-head.page .mini.act{opacity:1}
+.pj-head.page{margin-bottom:10px;padding-left:0}.pj-head.page .pj-name{font-size:17px;flex-basis:100%;margin-bottom:2px}.pj-head.page .mini.act{opacity:1}
 .day{font-family:var(--mono);font-size:12px;color:var(--faint);margin:10px 0 2px 6px}
 .pjlink,.ref[data-pj]{cursor:pointer}.pjlink:hover{text-decoration:underline}
 .btn.small{height:26px;font-size:12px;font-weight:400;padding:0 10px}
@@ -190,6 +282,10 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 .icon-btn:hover{background:var(--soft);color:var(--ink);border-color:var(--line)}
 .icon-btn[aria-pressed="true"]{background:var(--line);color:var(--ink)}
 #view .group:hover{background:var(--soft)}
+.grp-label{flex:1;min-width:0}
+.grp-head .pj-name{display:inline}
+.grp-head .pj-name .up{font-weight:400;color:var(--muted)}
+.grp-head .pj-name .pj-meta{margin-left:6px;font-weight:400}
 #help-btn{align-self:flex-start;width:28px;height:28px;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--muted);font-size:13px;margin-left:5px}
 #help-btn:hover{background:var(--line);color:var(--ink)}
 #nav.narrow #help-btn{align-self:center;margin:0}
@@ -220,6 +316,15 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 .dp-foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
 .dp-foot .mini{margin:0}
 .dp-hint{font-size:11px;color:var(--faint)}
+/* 备份 */
+.bk-note{font-size:12px;color:var(--faint)}
+.bk-list{max-width:640px;margin-top:4px}
+.bk-row{display:flex;align-items:center;gap:12px;padding:3px 6px;border-radius:6px;font-size:13px}
+.bk-row:hover{background:var(--soft)}
+.bk-name{font-family:var(--mono);font-size:12px;color:var(--ink2);min-width:15em}
+.bk-meta{flex:1;font-size:11px;color:var(--faint)}
+.bk-row .mini{margin:0}
+.bk-row .mini.arm{border-color:var(--warn);color:var(--warn);background:var(--warn-bg)}
 #toast{position:fixed;left:50%;bottom:36px;transform:translateX(-50%);background:var(--ink);color:var(--on);padding:8px 16px;border-radius:8px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30;max-width:90vw}
 #toast.show{opacity:1}
 @media (max-width:900px){main{flex-direction:column}#side{flex:none;max-width:none;border-left:0;border-top:1px solid var(--line)}.cols{grid-template-columns:1fr}}

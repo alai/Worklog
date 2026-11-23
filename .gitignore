@@ -1,6 +1,6 @@
 .DS_Store
-/data/*
-!/data/README.txt
+/data/
+/backups/
 /source/dist/
 /release/
 /ads/

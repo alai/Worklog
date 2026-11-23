@@ -86,6 +86,10 @@
     nav('Settings');
     qa('.seg button').find((x) => x.textContent === 'Dark').click();
     log.push('theme: ' + document.documentElement.dataset.theme + ' bg=' + getComputedStyle(document.body).backgroundColor);
+    { const bg = () => getComputedStyle(document.body).backgroundColor, pick = (t) => qa('.seg button').find((x) => x.textContent === t).click();
+      pick('Solarized'); const sd = bg(); pick('Light'); const sl = bg(), pal = document.documentElement.dataset.palette, todo = (() => { const x = document.createElement('span'); x.className = 'status TODO'; document.body.appendChild(x); const c = getComputedStyle(x).color; x.remove(); return c; })();
+      pick('Default'); const back = bg() + ' attr=' + (document.documentElement.dataset.palette || 'none'); pick('Dark');
+      log.push('palette: solarized dark bg=' + sd + ' light bg=' + sl + ' attr=' + pal + ' todo=' + todo + ' | default -> ' + back); }
     qa('.seg button').find((x) => x.textContent === 'Days').click();
     log.push('cfg: ' + localStorage.getItem('worklog-cfg'));
     q('#nav-toggle').click(); log.push('nav narrow: ' + q('#nav').classList.contains('narrow') + ' width=' + q('#nav').offsetWidth);
@@ -117,8 +121,8 @@
     press('j'); const onRec = q('.cur').classList.contains('rec'); press('o'); await sleep(50);
     log.push('o: on record=' + onRec + ' jumped to journal=' + (view === 'journal') + ' editing=' + qa('.row.editing').length);
     if (act().blur) act().blur(); press('k', { ctrlKey: true }); log.push('ctrl+k journal: on project block=' + !!q('.row.decl.cur'));
-    nav('Working'); if (act().blur) act().blur(); press('g'); const grouped = qa('.grp-head').length; press('j', { ctrlKey: true }); const gh = !!q('.grp-head.cur'); press('Enter'); const recsFolded = qa('#view .rec').length; press('Enter'); press('g');
-    log.push('g: groups=' + grouped + ' ctrl+j on group head=' + gh + ' enter folds group (recs ' + recsFolded + ' -> ' + qa('#view .rec').length + ') g again groups=' + qa('.grp-head').length);
+    nav('Working'); if (act().blur) act().blur(); press('p'); const grouped = qa('.grp-head').length; press('j', { ctrlKey: true }); const gh = !!q('.grp-head.cur'); press('Enter'); const recsFolded = qa('#view .rec').length; press('Enter'); press('p');
+    log.push('p: groups=' + grouped + ' ctrl+j on group head=' + gh + ' enter folds group (recs ' + recsFolded + ' -> ' + qa('#view .rec').length + ') g again groups=' + qa('.grp-head').length);
     press('?'); const opened = q('#help').open, rows = qa('.help-row').length; press('?'); log.push('help: opened=' + opened + ' rows=' + rows + ' closed=' + !q('#help').open);
     nav('Projects'); if (act().blur) act().blur(); press('J', { shiftKey: true }); const sj = !!q('.pj-head.cur'); press('3'); const d3 = view; press('1'); await sleep(50);
     log.push('alt keys: shift+j on heading=' + sj + ' 3=' + d3 + ' 1=' + view);
@@ -181,6 +185,77 @@
     typeIn(' x/date'); const midWord = !q('#dp').hidden; typeIn(' /date'); const again = !q('#dp').hidden; ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     log.push('/date rules: inside a word=' + midWord + ' after space=' + again + ' esc keeps text=' + ta.value.endsWith(' /date') + ' closed=' + q('#dp').hidden + ' still editing=' + (act() === ta));
     ta.value = ''; ta.dispatchEvent(new Event('input')); ta.blur(); await sleep(50);
+    // @name / #tag autocomplete
+    await go('2031-06-06'); q('#add').click(); ta = act();
+    const tIn = (x) => { const p0 = ta.selectionStart; ta.value = ta.value.slice(0, p0) + x + ta.value.slice(p0); ta.setSelectionRange(p0 + x.length, p0 + x.length); ta.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: x.slice(-1) })); };
+    const kd = (k, o = {}) => { const ev = new KeyboardEvent('keydown', Object.assign({ key: k, bubbles: true, cancelable: true }, o)); ta.dispatchEvent(ev); return ev.defaultPrevented; };
+    const tmenu = () => q('#tac').hidden ? 'closed' : qa('#tac .ac-title').map((x) => x.textContent).join(',');
+    tIn('Ask @'); const tBare = tmenu(); tIn('m'); const m1 = tmenu(); kd('Enter');
+    log.push('tag ac @: after @ alone=' + tBare + ' | @m -> ' + m1 + ' | Enter -> "' + ta.value + '" still editing=' + (act() === ta) + ' blocks=' + qa('#editor .row').length);
+    tIn('about #ME'); const m2 = tmenu(); kd('Tab'); log.push('tag ac #: #ME -> ' + m2 + ' | Tab -> "' + ta.value + '"');
+    tIn('and @{Li Wei} '); ta.blur(); await sleep(60); qa('.view').find((x) => x.textContent.includes('Ask')).click(); ta = act(); ta.setSelectionRange(ta.value.length, ta.value.length);
+    tIn('then @we'); const m3 = tmenu(); kd('Enter'); log.push('tag ac braces: @we -> ' + m3 + ' | -> "' + ta.value.slice(ta.value.indexOf('then')) + '"');
+    tIn('mail a@b'); const tEmail = tmenu(); tIn(' x#1'); const tMid = tmenu(); tIn(' @Steve'); const tExact = tmenu(); tIn(' @Zz'); const tNone = tmenu();
+    log.push('tag ac rules: email=' + tEmail + ' inside word=' + tMid + ' exact only=' + tExact + ' unknown=' + tNone);
+    tIn(' @J'); const m4 = tmenu(); const escd = kd('Escape'); log.push('tag ac esc: ' + m4 + ' -> ' + tmenu() + ' prevented=' + escd + ' still editing=' + (act() === ta) + ' text kept=' + ta.value.endsWith('@J'));
+    ta.value = ''; ta.dispatchEvent(new Event('input')); ta.blur(); await sleep(50);
+    // also in list-page inline edit
+    show('tag', '@Mandy'); const rr = q('#view .rec.editable'); rr.click(); ta = act(); ta.setSelectionRange(ta.value.length, ta.value.length);
+    const before2 = ta.value; tIn(' cc @st'); const m5 = tmenu(); kd('Enter'); log.push('tag ac in list edit: ' + m5 + ' -> ends "' + ta.value.slice(before2.length) + '" still editing=' + (act() === ta));
+    ta.value = before2; ta.blur(); await sleep(60); await saving;
+    // gg / Shift+G / Shift+M
+    show('search', 'e'); if (act().blur) act().blur(); await sleep(30);
+    const all = navItems(), idx = () => all.indexOf(q('.cur')); const nItems = all.length;
+    press('G', { shiftKey: true }); const last = idx(); press('g'); const afterOneG = idx(); press('g'); const first = idx();
+    press('g'); await sleep(700); press('g'); const slowGG = idx();
+    press('G', { shiftKey: true }); press('g'); press('j'); press('g'); const brokenGG = idx();
+    q('#view').scrollTop = 0; press('M', { shiftKey: true }); const mi = idx(), mr = q('.cur') && q('.cur').getBoundingClientRect(), vb = q('#view').getBoundingClientRect();
+    press('p'); const pOnSearch = qa('.grp-head').length;
+    log.push('gg/G/M: items=' + nItems + ' G->' + last + ' one g stays=' + (afterOneG === last) + ' gg->' + first + ' slow gg (700ms apart) stays=' + (slowGG === first) + ' g,j,g not gg=' + (brokenGG !== 0) + ' | M->' + mi + ' visible=' + !!(mr && mr.top >= vb.top && mr.bottom <= vb.bottom) + ' | P on search page does nothing=' + (pOnSearch === 0));
+    await go('2026-11-13'); if (act().blur) act().blur(); const jRows = navItems(); press('G', { shiftKey: true }); const jl = jRows.indexOf(q('.cur')); press('g'); press('g'); log.push('gg/G journal: rows=' + jRows.length + ' G->' + jl + ' gg->' + jRows.indexOf(q('.cur')));
+    log.push('version: ' + qa('#view').length + ' ' + APP_VERSION);
+    // ---- backups ----
+    const bkMap = () => window.__subs.get('backups') || new Map(), bkNames = () => [...bkMap().keys()].sort();
+    const T0 = today(), mdCount = () => [...__store.keys()].filter((k) => /\.md$/.test(k)).length;
+    { const first = bkNames(), b = bkMap().get(T0 + '.worklog.gz'), parsed = b && BK.parse(await BK.gunzip(b.blob));
+      const sample = parsed && parsed.files.find(([n]) => n === '2026-11-13.md');
+      log.push('backup daily: names=' + first.join(',').replace(new RegExp(T0, 'g'), 'TODAY') + ' files in backup=' + (parsed && parsed.files.length) + ' gz bytes=' + (b && b.blob.size) + ' sample matches a real file=' + !!(sample && sample[1].includes('[[PJ/AI-Sandbox]]'))); }
+    { const tricky = [['2026-01-01.md', 'line\n--- 2026-01-02.md 5\nabcde\n'], ['2026-01-02.md', ''], ['2026-01-03.md', '中文 @{Li Wei}\n']];
+      const back = BK.parse(await BK.gunzip(await BK.gzip(BK.bundle(tricky)))).files;
+      log.push('backup format: round-trip with tricky content=' + (JSON.stringify(back) === JSON.stringify(tricky))); }
+    show('issues'); await sleep(120);
+    { const before = bkNames().length, btn = qa('.btn').find((x) => x.textContent === 'Back up now'); btn.click(); await sleep(250);
+      log.push('backup now: ' + before + ' -> ' + bkNames().length + ' rows listed=' + qa('.bk-row').length + ' browser copy row=' + qa('.bk-name').some((x) => x.textContent === 'Browser copy')); }
+    { const one = await BK.gzip(BK.bundle([['2026-01-01.md', 'x\n']]));
+      for (let d = 1; d <= 16; d++) bkMap().set(`2026-01-${p(d)}.worklog.gz`, { blob: one, mtime: d });
+      await BK.prune(); const left = bkNames();
+      log.push('backup keep 14: total=' + left.length + ' oldest kept=' + left[0] + ' today kept=' + left.some((n) => n.startsWith(T0))); }
+    { const copy = await BK.browserCopy(); log.push('backup browser copy: files=' + (copy && copy.files) + ' blob=' + !!(copy && copy.blob && copy.blob.size)); }
+    { let got = null; const orig = URL.createObjectURL; URL.createObjectURL = (b) => { got = b; return orig.call(URL, b); };
+      show('settings'); await sleep(50); qa('.btn').find((x) => x.textContent === 'Export backup').click(); await sleep(250); URL.createObjectURL = orig;
+      const files = got && BK.parse(await BK.gunzip(got)).files.length;
+      log.push('backup export: toast=' + q('#toast').textContent.replace(/\d{4}-\d\d-\d\d-\d{4}/, 'STAMP') + ' files=' + files + ' (data has ' + mdCount() + ')'); }
+    // 数据被空文件夹覆盖：打开时拦住，不写任何东西，可以从备份恢复
+    { const saved = new Map(__store), nBefore = mdCount(); __store.clear(); __writes.length = 0;
+      await start(); await sleep(50);
+      const msg = q('#banner').hidden ? 'no banner' : q('#banner').textContent;
+      await go('2032-02-02'); q('#add').click(); ta = act(); const canEdit = ta.tagName === 'TEXTAREA' && !ta.readOnly; if (canEdit) { type(ta, 'typed while held'); ta.blur(); } await sleep(150); await saving;
+      log.push('backup guard: banner="' + msg.slice(0, 70) + '…" readOnly=' + readOnly + ' writes while held=' + __writes.filter((w) => !w.startsWith('backups/')).length);
+      qa('#banner .btn').find((x) => x.textContent === 'Restore a backup').click(); await sleep(150);
+      const rows = qa('.bk-row'), newest = rows[0], newestName = newest.querySelector('.bk-name').textContent, rb = newest.querySelector('.mini');
+      const want = BK.parse(await BK.gunzip(bkMap().get(newestName + '.worklog.gz').blob)).files;
+      rb.click(); const armed = rb.textContent; rb.click(); await sleep(500); await saving;
+      log.push('backup restore: newest listed first=' + /-\d{4}$/.test(newestName) + ' armed="' + armed + '" files ' + 0 + ' -> ' + mdCount() + ' (had ' + nBefore + ') banner hidden=' + q('#banner').hidden + ' readOnly=' + readOnly + ' view=' + view + ' toast=' + q('#toast').textContent.replace(new RegExp(T0, 'g'), 'TODAY') + ' before-restore backup made=' + bkNames().some((n) => n.includes('before-restore')));
+      const same = want.length > 0 && want.every(([n, text]) => __store.has(n) && __store.get(n).text === text);
+      log.push('backup restore content: restored files identical to backup=' + same);
+      // 少了一半以上 → 同样拦住；选择"保持现状"后恢复可写，并记住新的规模
+      const keys = [...__store.keys()]; keys.slice(0, Math.floor(keys.length * 0.7)).forEach((k) => __store.delete(k));
+      await start(); await sleep(50); const held = !q('#banner').hidden && readOnly;
+      qa('#banner .btn').find((x) => x.textContent === 'Keep as is').click(); await sleep(50);
+      const remembered = JSON.parse(localStorage.getItem('worklog-ws:' + FS.where));
+      log.push('backup keep as is: held=' + held + ' -> banner hidden=' + q('#banner').hidden + ' readOnly=' + readOnly + ' remembered files=' + remembered.files + ' (now ' + mdCount() + ')');
+      for (const [k, val] of saved) __store.set(k, val); await start(); await sleep(50);
+    }
     if (window.__final) window.__final();
   } catch (e) { log.push('ERROR ' + e.stack); }
   const out = document.createElement('pre'); out.id = 'SMOKE'; out.textContent = log.join('\n'); document.body.appendChild(out);
