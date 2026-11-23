@@ -136,6 +136,7 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 .row{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;padding:3px 8px;border-radius:8px;min-height:32px}
 .row.editing{background:var(--edit);outline:2px solid var(--accent)}
 .row.deleted .view{text-decoration:line-through;color:var(--muted)}
+.view code,.rec-text code,.ac-title code{font-family:var(--mono);font-size:.88em;background:var(--soft);border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
 .row.raw .view{font-family:var(--mono);font-size:13px;color:var(--muted);cursor:default}
 .bullet{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none;margin-top:9px}
 .bullet.square{border-radius:2px;background:var(--ink)}

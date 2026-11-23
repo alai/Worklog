@@ -299,6 +299,26 @@
       await go('2031-07-01'); const delBtn = qa('#editor .row').find((x) => x.querySelector('.view').textContent.startsWith('需要进一步')).querySelector('.mini.del'); delBtn.click(); await sleep(80);
       log.push('ref delete original: toast="' + q('#toast').textContent + '" quotes=' + qa('#editor .qref').map((x) => x.className + ':' + x.textContent).join(' ; ') + ' orig.del=' + (S.pages[cur].find((x) => x.text.startsWith('需要进一步')) || {}).del);
     }
+    // ---- 行内代码 ----
+    { await go('2031-07-03'); q('#add').click(); let ta = act();
+      const tIn = (x) => { for (const ch of x) { const p0 = ta.selectionStart; ta.value = ta.value.slice(0, p0) + ch + ta.value.slice(ta.selectionEnd); ta.setSelectionRange(p0 + 1, p0 + 1); ta.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ch })); } };
+      const kd = (k) => { const ev = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }); ta.dispatchEvent(ev); return ev.defaultPrevented; };
+      const tick = () => { if (!kd('`')) tIn('`'); };   // 没被接管的按键就照常输入
+      tIn('run '); tick(); const paired = ta.value + '@' + ta.selectionStart;
+      tIn('git @Ma'); const tagMenu = !q('#tac').hidden; tIn(' (('); const refMenu = !q('#rac').hidden, noAuto = !ta.value.includes('(())'); tIn(' /date'); const picker = !q('#dp').hidden;
+      tick(); const over = ta.value.endsWith('/date`') && ta.selectionStart === ta.value.length;
+      tIn(' @Ma'); const tagAfter = !q('#tac').hidden; kd('Escape');
+      tIn(' '); tick(); const bsPair = kd('Backspace'), afterBs = ta.value.slice(-3);
+      tIn(' wrap'); ta.setSelectionRange(ta.value.length - 4, ta.value.length); tick(); const wrapped = ta.value.endsWith('`wrap`');
+      // 代码里写了 (( / @ / [[，光标移到代码后面继续打字，不能把它们当成触发
+      const leak = []; for (const t of ['((', '@Ma', '[[Al']) { ta.setSelectionRange(ta.value.length, ta.value.length); tIn(' '); tick(); tIn(t); const end = ta.value.length; ta.setSelectionRange(end, end); tIn(' x'); leak.push(t + ':' + [!q('#rac').hidden, !q('#tac').hidden, !q('#ac').hidden].map(Number).join('')); }
+      log.push('inline code after closing: menus(ref,tag,project) ' + leak.join(' ') + ' value tail="' + ta.value.slice(-22) + '"');
+      ta.value = ta.value.replace(/ `\(\(` x `@Ma` x `\[\[Al` x$/, ''); ta.dispatchEvent(new Event('input'));
+      ta.blur(); await sleep(120);
+      const view = qa('#editor .view').find((x) => x.textContent.startsWith('run ')), codes = view ? [...view.querySelectorAll('code')].map((x) => x.textContent) : [];
+      log.push('inline code: pair="' + paired + '" in code: tag menu=' + tagMenu + ' ref menu=' + refMenu + ' no (()) pair=' + noAuto + ' date picker=' + picker + ' | ` types over=' + over + ' | after code: tag menu=' + tagAfter + ' | empty pair backspace=' + bsPair + ' "' + afterBs + '" | wrap selection=' + wrapped);
+      log.push('inline code render: code=' + JSON.stringify(codes) + ' person spans outside=' + (view ? view.querySelectorAll('.person').length : -1) + ' tag @Ma indexed=' + recordsByTag(S, '@Ma').length);
+    }
     // ---- backups ----
     const bkMap = () => window.__subs.get('backups') || new Map(), bkNames = () => [...bkMap().keys()].sort();
     const T0 = today(), mdCount = () => [...__store.keys()].filter((k) => /\.md$/.test(k)).length;

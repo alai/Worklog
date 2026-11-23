@@ -151,6 +151,7 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 .row{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;padding:3px 8px;border-radius:8px;min-height:32px}
 .row.editing{background:var(--edit);outline:2px solid var(--accent)}
 .row.deleted .view{text-decoration:line-through;color:var(--muted)}
+.view code,.rec-text code,.ac-title code{font-family:var(--mono);font-size:.88em;background:var(--soft);border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
 .row.raw .view{font-family:var(--mono);font-size:13px;color:var(--muted);cursor:default}
 .bullet{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none;margin-top:9px}
 .bullet.square{border-radius:2px;background:var(--ink)}
@@ -470,6 +471,16 @@ function validDate(s) {
 
 // ---- 内存索引：按版本号缓存，结构变化后首次使用时重建 ----
 const TAG_RE = /(?<![A-Za-z0-9\\])([@#])(?:\{([^}\n]+)\}|([A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*))/g;   // 名字中间允许点号：@Firstname.Lastname；句末的点不算
+// 行内代码 `...`：里面的 @ # (( [[ 都只是文字。同一行里成对的反引号才算，扫描时先把代码段换成等长的空格，位置不变
+const CODE_RE = /`[^`\n]*`/g;
+function maskCode(t) { return t.indexOf('`') < 0 ? t : t.replace(CODE_RE, (x) => ' '.repeat(x.length)); }
+function outsideCode(t, fn, keep = (x) => x) {   // 只对代码段以外的部分做 fn，代码段交给 keep
+  if (t.indexOf('`') < 0) return fn(t);
+  let out = '', i = 0, m; CODE_RE.lastIndex = 0;
+  while ((m = CODE_RE.exec(t))) { out += fn(t.slice(i, m.index)) + keep(m[0]); i = m.index + m[0].length; }
+  return out + fn(t.slice(i));
+}
+const inCode = (upto) => (upto.slice(upto.lastIndexOf('\n') + 1).split('`').length - 1) % 2 === 1;   // 光标前这一行有落单的反引号：正在代码里
 const REC_RE = new RegExp(`\\(\\((${ID_RE})\\)\\)`, 'g');   // 正文里对别的记录的引用
 const REF_RE = new RegExp(`\\[\\[PJ\\/[^\\]|\\[]+\\|(${ID_RE})\\]\\]|\\(\\((${ID_RE})\\)\\)`, 'g');
 let cache = { S: null, ver: -1 };
@@ -486,19 +497,20 @@ function index(S) {
       else if (b.type === 'ord') {
         b.own = ctx;   // 推导出的归属，随索引一起刷新
         // 反向链接不依赖引用方有没有 ID：刚写下、还没保存的记录也要立刻算上
-        if (b.text.indexOf('((') >= 0) {
+        const tx = maskCode(b.text);
+        if (tx.indexOf('((') >= 0) {
           const seen = new Set(); let r;
           REC_RE.lastIndex = 0;
-          while ((r = REC_RE.exec(b.text))) if (r[1] !== b.id && !seen.has(r[1])) { seen.add(r[1]); add(brefs, r[1], b); }
+          while ((r = REC_RE.exec(tx))) if (r[1] !== b.id && !seen.has(r[1])) { seen.add(r[1]); add(brefs, r[1], b); }
         }
         if (b.id) {
           add(byProj, ctx, b);
           // 同一条记录里同一个标签或引用出现几次都只登记一次，否则标签页会把这条记录列出好几遍
           let m; const seenTags = new Set(), seenRefs = new Set();
           TAG_RE.lastIndex = 0;
-          while ((m = TAG_RE.exec(b.text))) seenTags.add(m[1] + (m[2] || m[3]));
+          while ((m = TAG_RE.exec(tx))) seenTags.add(m[1] + (m[2] || m[3]));
           REF_RE.lastIndex = 0;
-          while ((m = REF_RE.exec(b.text))) seenRefs.add(m[1] || m[2]);
+          while ((m = REF_RE.exec(tx))) seenRefs.add(m[1] || m[2]);
           if (b.extParent) seenRefs.add(b.extParent);
           for (const t of seenTags) add(tags, t, b.id);
           for (const r of seenRefs) add(refs, r, b.id);
@@ -538,11 +550,11 @@ const RE_PURE = new RegExp(`^\\[\\[PJ\\/[^\\]|\\[]+\\|(${ID_RE})\\]\\]$`);
 
 function normalizeRefs(S, text) {
   if (text.indexOf('[[') < 0) return text;
-  return text.replace(/\[\[([^\[\]|]+)\]\]/g, (all, inner) => {
+  return outsideCode(text, (part) => part.replace(/\[\[([^\[\]|]+)\]\]/g, (all, inner) => {
     if (/^\d{4}-\d{2}-\d{2}$/.test(inner)) return all;
     const hits = matchProjects(S, inner.replace(/^PJ\//, ''));
     return hits.length === 1 ? `[[PJ/${hits[0].name}|${hits[0].id}]]` : all;
-  });
+  }));
 }
 
 // 失焦或结构操作前调用：只移动和补全字段，不改写正文
@@ -926,7 +938,7 @@ function setLife(S, id, today) {
   return { ok: true, page: b.page };
 }
 
-if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate };
+if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate, maskCode, outsideCode, inCode };
 
 // 本地目录读写层：File System Access API。window.__mockDir 存在时用它代替真实目录（测试用）。
 const FS = {
@@ -1023,7 +1035,7 @@ const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 let S = newState(), cur = today(), readOnly = false, rendering = false, ac = null, origin = null;
 let showSide = false, prevLines = new Set(), view = 'journal', viewArg = null;
-const APP_VERSION = '0.35';
+const APP_VERSION = '0.36';
 // 外观由三项组合：THEMES 选亮暗（System 跟随系统），PALETTES 选色板，cfg.color 选着色强度（Full/Soft/Mono）。
 // 登记在这里的名字会自动出现在 Settings；对应的变量写在 style.css
 const THEMES = { light: 'Light', dark: 'Dark' };
@@ -1098,7 +1110,9 @@ async function reloadPage(date) {
 // ---- 正文渲染 ----
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TOKEN = new RegExp(`(\\\\[@#\\[(^\\\\])|\\[\\[PJ\\/([^\\]|\\[]+)\\|(${ID_RE})\\]\\]|\\(\\((${ID_RE})\\)\\)|((?<![A-Za-z0-9])@(?:\\{[^}\\n]+\\}|[A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z0-9_-]+)*))|((?<![A-Za-z0-9])#(?:\\{[^}\\n]+\\}|[A-Za-z][A-Za-z0-9_-]*))`, 'g');
-function richLine(line, P, byId) {
+// 行内代码原样显示，里面的标签、引用都不解析
+function richLine(line, P, byId) { return outsideCode(line, (part) => richPart(part, P, byId), (c) => `<code>${esc(c.slice(1, -1))}</code>`); }
+function richPart(line, P, byId) {
   let out = '', i = 0, m;
   TOKEN.lastIndex = 0;
   while ((m = TOKEN.exec(line))) {
@@ -1115,10 +1129,10 @@ function richLine(line, P, byId) {
 // 被引用记录第一行的纯文字：项目引用换成项目名、花括号去掉；它里面再引用别的记录时只展开一层
 function refText(b, depth = 0) {
   const ix = index(S);
-  return b.text.split('\n')[0]
+  return outsideCode(b.text.split('\n')[0], (t) => t
     .replace(new RegExp(`\\(\\((${ID_RE})\\)\\)`, 'g'), (all, id) => (depth < 1 && ix.byId[id] ? '“' + refText(ix.byId[id], depth + 1) + '”' : '…'))
     .replace(new RegExp(`\\[\\[PJ\\/([^\\]|\\[]+)\\|${ID_RE}\\]\\]`, 'g'), '$1')
-    .replace(/([@#])\{([^}\n]+)\}/g, '$1$2');
+    .replace(/([@#])\{([^}\n]+)\}/g, '$1$2'), (c) => c.slice(1, -1));   // 引文是纯文字：代码段只去掉反引号
 }
 function refWhere(b) { const P = index(S).P; return b.own && b.own !== 'INBOX' && P[b.own] ? projectPath(P, b.own) : 'Inbox'; }
 // 正文里的 ((ID)) 显示成带引号的原文；悬停看日期和所属项目，点击跳回原记录
@@ -1202,7 +1216,7 @@ function drawRow(b, parent, ix) {
     ta.onfocus = () => { ta._t0 = ta.value; };   // 记下进入编辑时的文字，退出时据此判断有没有改过
     ta.onblur = (e) => onBlur(e, b, row, parent);
     ta.oninput = (e) => { if (ta.readOnly) return; pairBrackets(ta, e); checkRef(ta, e, b); b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); checkDate(ta); checkTag(ta); };
-    ta.addEventListener('keydown', (e) => { if (!ta.readOnly && pairKeys(ta, e)) { b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); } });
+    ta.addEventListener('keydown', (e) => { if (codeKeys(ta, e)) return; if (!ta.readOnly && pairKeys(ta, e)) { b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); } });
     ta.onkeydown = (e) => onKey(e, b, ta);
     body.appendChild(ta);
   }
@@ -1352,8 +1366,21 @@ function hop(b, dir) {
 function pairBrackets(ta, e) {
   if (!e || e.inputType !== 'insertText' || e.data !== '[' || e.isComposing) return;
   const p = ta.selectionStart, v = ta.value;
-  if (p !== ta.selectionEnd || v.slice(p - 2, p) !== '[[' || v[p - 3] === '[' || v.slice(p, p + 2) === ']]') return;
+  if (p !== ta.selectionEnd || v.slice(p - 2, p) !== '[[' || v[p - 3] === '[' || v.slice(p, p + 2) === ']]' || inCode(v.slice(0, p))) return;
   ta.value = v.slice(0, p) + ']]' + v.slice(p); ta.setSelectionRange(p, p);
+}
+// 反引号：打出开头的 ` 自动补上结尾的 `；选中文字时包起来；结尾处再打 ` 跳过；空的 `` 中间退格一起删
+function codeKeys(ta, e) {
+  if (ta.readOnly || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return false;
+  const p = ta.selectionStart, q = ta.selectionEnd, v = ta.value, done = (val, a, z = a) => { e.preventDefault(); e.stopPropagation(); ta.value = val; ta.setSelectionRange(a, z); ta.dispatchEvent(new Event('input')); return true; };
+  if (e.key === '`') {
+    if (p !== q) { if (v.slice(p, q).includes('\n')) return false; return done(v.slice(0, p) + '`' + v.slice(p, q) + '`' + v.slice(q), p + 1, q + 1); }
+    if (inCode(v.slice(0, p))) { if (v[p] === '`') { e.preventDefault(); e.stopPropagation(); ta.setSelectionRange(p + 1, p + 1); return true; } return false; }
+    if (v[p - 1] === '`' || (v[p] && !/\s/.test(v[p]))) return false;   // 连打 ``、或紧贴着文字时不补
+    return done(v.slice(0, p) + '``' + v.slice(p), p + 1);
+  }
+  if (e.key === 'Backspace' && p === q && v[p - 1] === '`' && v[p] === '`' && inCode(v.slice(0, p))) return done(v.slice(0, p - 1) + v.slice(p + 1), p - 1);
+  return false;
 }
 function pairKeys(ta, e) {
   const p = ta.selectionStart, v = ta.value;
@@ -1364,7 +1391,7 @@ function pairKeys(ta, e) {
 }
 function checkAc(b, ta) {
   const upto = ta.value.slice(0, ta.selectionStart);
-  const m = b.type === 'ord' ? upto.match(/\[\[([^\[\]\n|]*)(?:\]\])?$/) : null;
+  const m = b.type === 'ord' && !inCode(upto) ? upto.match(/\[\[([^\[\]\n|`]*)(?:\]\])?$/) : null;
   if (!m) return closeAc();
   const start = upto.length - m[0].length, atStart = upto.slice(0, start).trim() === '';
   const q = m[1].replace(/^PJ\//, '').trim(), P = projects(S), nq = normName(q), items = [];
@@ -1668,6 +1695,7 @@ function editRec(r, t, b, o) {
   navIdx = navItems().indexOf(r); setCur(r);
   r.classList.add('editing'); t.textContent = ''; t.appendChild(ta); grow(ta);
   ta.oninput = (e) => { checkRef(ta, e, b); grow(ta); checkDate(ta); checkTag(ta); };
+  ta.addEventListener('keydown', (e) => codeKeys(ta, e));
   ta.onkeydown = (e) => {
     if (e.isComposing) return;
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {   // 和 Journal 一样循环切换状态
@@ -2157,7 +2185,7 @@ function shiftDate(days, months) {
 function pickDate(s) { const f = dp.onPick; closeDate(); f(s); }
 // 输入 /date（前面是行首或空白）时在光标所在的输入框下弹出；选中后用 2025-11-23 这样的文字替换掉 /date
 function checkDate(ta) {
-  const p = ta.selectionStart, hit = p === ta.selectionEnd && /(^|\s)\/date$/.test(ta.value.slice(0, p));
+  const p = ta.selectionStart, hit = p === ta.selectionEnd && /(^|\s)\/date$/.test(ta.value.slice(0, p)) && !inCode(ta.value.slice(0, p));   // 代码里的 /date 只是文字
   if (!hit) { if (dp && dp.owner === ta) closeDate(); return; }
   openDate(ta, today(), (s) => {
     const q = ta.selectionStart, v = ta.value;
@@ -2190,7 +2218,7 @@ function closeTag() { if (!tagAc) return; tagAc = null; $('#tac').hidden = true;
 function checkTag(ta) {
   const p = ta.selectionStart, upto = ta.value.slice(0, p);
   // 行首或非字母数字之后的 @ / #，后面至少一个字符；@{… 是带空格名字的写法，括号闭合前都算在查询里
-  const m = p === ta.selectionEnd && upto.match(/(?<![A-Za-z0-9\\])([@#])(?:\{([^}\n]*)|([^\s@#{}\[\]()]+))$/);
+  const m = p === ta.selectionEnd && !inCode(upto) && upto.match(/(?<![A-Za-z0-9\\])([@#])(?:\{([^}`\n]*)|([^\s@#{}\[\]()`]+))$/);
   const q = m && (m[2] != null ? m[2] : m[3]);
   if (!m || !q || !q.trim()) return closeTag();
   const sig = m[1], nq = q.toLowerCase(), hits = [];
@@ -2244,10 +2272,11 @@ function refCandidates() {   // 小写的正文缓存起来，数据没变就不
 function checkRef(ta, e, self) {
   let p = ta.selectionStart, v = ta.value;
   // 刚打出第二个 ( 时补上 ))，光标留在中间
+  if (inCode(v.slice(0, p))) return closeRef();   // 代码里的 (( 不是引用
   if (e && e.inputType === 'insertText' && e.data === '(' && !e.isComposing && p === ta.selectionEnd && v.slice(p - 2, p) === '((' && v[p - 3] !== '(' && v.slice(p, p + 2) !== '))') {
     ta.value = v = v.slice(0, p) + '))' + v.slice(p); ta.setSelectionRange(p, p);
   }
-  const m = p === ta.selectionEnd && v.slice(0, p).match(/\(\(([^()\n]*)$/);
+  const m = p === ta.selectionEnd && v.slice(0, p).match(/\(\(([^()`\n]*)$/);   // 查询里不能跨过反引号：`((` 后面接着写，不能把代码里的 (( 当成引用
   if (!m || new RegExp(`^${ID_RE}$`).test(m[1])) return closeRef();   // 已经是写好的引用
   const terms = m[1].toLowerCase().split(/\s+/).filter(Boolean), hits = [];
   for (const it of refCandidates()) {

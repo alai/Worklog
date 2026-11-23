@@ -180,3 +180,14 @@ console.log('ALL OK');
   if (got !== '13@2026-11-10,13@2026-11-10,53@2026-10-01') throw new Error('quiet days: ' + got);
   console.log('project quiet OK');
 }
+{ // 行内代码：里面的 @ # (( [[ 都是文字，不进索引，也不被改写
+  const C = require('../src/core.js'), S = C.newState(), T = '2026-11-23';
+  C.loadPage(S, T, '- [[PJ/Alpha]] Project created.\n- target\n', T); C.settle(S, T); C.ensureIds(S, T, T);
+  const tid = S.pages[T][1].id;
+  C.loadPage(S, '2026-11-24', `- run \`git log @Tom #x ((${tid})) [[Alpha]]\` with @Mandy #real\n- odd \` @Kevin\n`, T); C.settle(S, '2026-11-24'); C.ensureIds(S, '2026-11-24', '2026-11-24');
+  const ix = C.index(S), t = (x) => (ix.tags.get(x) || []).length;
+  const got = [t('@Tom'), t('#x'), t('@Mandy'), t('#real'), t('@Kevin'), (ix.brefs.get(tid) || []).length, S.pages['2026-11-24'][0].text.includes('`git log @Tom #x ((' + tid + ')) [[Alpha]]`')].join(',');
+  if (got !== '0,0,1,1,1,0,true') throw new Error('inline code: ' + got);
+  if (C.inCode('a `b') !== true || C.inCode('a `b` c') !== false || C.inCode('x `y`\nz') !== false) throw new Error('inCode');
+  console.log('inline code OK');
+}

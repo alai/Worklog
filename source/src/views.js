@@ -77,6 +77,7 @@ function editRec(r, t, b, o) {
   navIdx = navItems().indexOf(r); setCur(r);
   r.classList.add('editing'); t.textContent = ''; t.appendChild(ta); grow(ta);
   ta.oninput = (e) => { checkRef(ta, e, b); grow(ta); checkDate(ta); checkTag(ta); };
+  ta.addEventListener('keydown', (e) => codeKeys(ta, e));
   ta.onkeydown = (e) => {
     if (e.isComposing) return;
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {   // 和 Journal 一样循环切换状态
@@ -566,7 +567,7 @@ function shiftDate(days, months) {
 function pickDate(s) { const f = dp.onPick; closeDate(); f(s); }
 // 输入 /date（前面是行首或空白）时在光标所在的输入框下弹出；选中后用 2025-11-23 这样的文字替换掉 /date
 function checkDate(ta) {
-  const p = ta.selectionStart, hit = p === ta.selectionEnd && /(^|\s)\/date$/.test(ta.value.slice(0, p));
+  const p = ta.selectionStart, hit = p === ta.selectionEnd && /(^|\s)\/date$/.test(ta.value.slice(0, p)) && !inCode(ta.value.slice(0, p));   // 代码里的 /date 只是文字
   if (!hit) { if (dp && dp.owner === ta) closeDate(); return; }
   openDate(ta, today(), (s) => {
     const q = ta.selectionStart, v = ta.value;
@@ -599,7 +600,7 @@ function closeTag() { if (!tagAc) return; tagAc = null; $('#tac').hidden = true;
 function checkTag(ta) {
   const p = ta.selectionStart, upto = ta.value.slice(0, p);
   // 行首或非字母数字之后的 @ / #，后面至少一个字符；@{… 是带空格名字的写法，括号闭合前都算在查询里
-  const m = p === ta.selectionEnd && upto.match(/(?<![A-Za-z0-9\\])([@#])(?:\{([^}\n]*)|([^\s@#{}\[\]()]+))$/);
+  const m = p === ta.selectionEnd && !inCode(upto) && upto.match(/(?<![A-Za-z0-9\\])([@#])(?:\{([^}`\n]*)|([^\s@#{}\[\]()`]+))$/);
   const q = m && (m[2] != null ? m[2] : m[3]);
   if (!m || !q || !q.trim()) return closeTag();
   const sig = m[1], nq = q.toLowerCase(), hits = [];
@@ -653,10 +654,11 @@ function refCandidates() {   // 小写的正文缓存起来，数据没变就不
 function checkRef(ta, e, self) {
   let p = ta.selectionStart, v = ta.value;
   // 刚打出第二个 ( 时补上 ))，光标留在中间
+  if (inCode(v.slice(0, p))) return closeRef();   // 代码里的 (( 不是引用
   if (e && e.inputType === 'insertText' && e.data === '(' && !e.isComposing && p === ta.selectionEnd && v.slice(p - 2, p) === '((' && v[p - 3] !== '(' && v.slice(p, p + 2) !== '))') {
     ta.value = v = v.slice(0, p) + '))' + v.slice(p); ta.setSelectionRange(p, p);
   }
-  const m = p === ta.selectionEnd && v.slice(0, p).match(/\(\(([^()\n]*)$/);
+  const m = p === ta.selectionEnd && v.slice(0, p).match(/\(\(([^()`\n]*)$/);   // 查询里不能跨过反引号：`((` 后面接着写，不能把代码里的 (( 当成引用
   if (!m || new RegExp(`^${ID_RE}$`).test(m[1])) return closeRef();   // 已经是写好的引用
   const terms = m[1].toLowerCase().split(/\s+/).filter(Boolean), hits = [];
   for (const it of refCandidates()) {

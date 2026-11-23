@@ -9,7 +9,7 @@ const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 let S = newState(), cur = today(), readOnly = false, rendering = false, ac = null, origin = null;
 let showSide = false, prevLines = new Set(), view = 'journal', viewArg = null;
-const APP_VERSION = '0.35';
+const APP_VERSION = '0.36';
 // 外观由三项组合：THEMES 选亮暗（System 跟随系统），PALETTES 选色板，cfg.color 选着色强度（Full/Soft/Mono）。
 // 登记在这里的名字会自动出现在 Settings；对应的变量写在 style.css
 const THEMES = { light: 'Light', dark: 'Dark' };
@@ -84,7 +84,9 @@ async function reloadPage(date) {
 // ---- 正文渲染 ----
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TOKEN = new RegExp(`(\\\\[@#\\[(^\\\\])|\\[\\[PJ\\/([^\\]|\\[]+)\\|(${ID_RE})\\]\\]|\\(\\((${ID_RE})\\)\\)|((?<![A-Za-z0-9])@(?:\\{[^}\\n]+\\}|[A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z0-9_-]+)*))|((?<![A-Za-z0-9])#(?:\\{[^}\\n]+\\}|[A-Za-z][A-Za-z0-9_-]*))`, 'g');
-function richLine(line, P, byId) {
+// 行内代码原样显示，里面的标签、引用都不解析
+function richLine(line, P, byId) { return outsideCode(line, (part) => richPart(part, P, byId), (c) => `<code>${esc(c.slice(1, -1))}</code>`); }
+function richPart(line, P, byId) {
   let out = '', i = 0, m;
   TOKEN.lastIndex = 0;
   while ((m = TOKEN.exec(line))) {
@@ -101,10 +103,10 @@ function richLine(line, P, byId) {
 // 被引用记录第一行的纯文字：项目引用换成项目名、花括号去掉；它里面再引用别的记录时只展开一层
 function refText(b, depth = 0) {
   const ix = index(S);
-  return b.text.split('\n')[0]
+  return outsideCode(b.text.split('\n')[0], (t) => t
     .replace(new RegExp(`\\(\\((${ID_RE})\\)\\)`, 'g'), (all, id) => (depth < 1 && ix.byId[id] ? '“' + refText(ix.byId[id], depth + 1) + '”' : '…'))
     .replace(new RegExp(`\\[\\[PJ\\/([^\\]|\\[]+)\\|${ID_RE}\\]\\]`, 'g'), '$1')
-    .replace(/([@#])\{([^}\n]+)\}/g, '$1$2');
+    .replace(/([@#])\{([^}\n]+)\}/g, '$1$2'), (c) => c.slice(1, -1));   // 引文是纯文字：代码段只去掉反引号
 }
 function refWhere(b) { const P = index(S).P; return b.own && b.own !== 'INBOX' && P[b.own] ? projectPath(P, b.own) : 'Inbox'; }
 // 正文里的 ((ID)) 显示成带引号的原文；悬停看日期和所属项目，点击跳回原记录
@@ -188,7 +190,7 @@ function drawRow(b, parent, ix) {
     ta.onfocus = () => { ta._t0 = ta.value; };   // 记下进入编辑时的文字，退出时据此判断有没有改过
     ta.onblur = (e) => onBlur(e, b, row, parent);
     ta.oninput = (e) => { if (ta.readOnly) return; pairBrackets(ta, e); checkRef(ta, e, b); b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); checkDate(ta); checkTag(ta); };
-    ta.addEventListener('keydown', (e) => { if (!ta.readOnly && pairKeys(ta, e)) { b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); } });
+    ta.addEventListener('keydown', (e) => { if (codeKeys(ta, e)) return; if (!ta.readOnly && pairKeys(ta, e)) { b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); } });
     ta.onkeydown = (e) => onKey(e, b, ta);
     body.appendChild(ta);
   }
@@ -338,8 +340,21 @@ function hop(b, dir) {
 function pairBrackets(ta, e) {
   if (!e || e.inputType !== 'insertText' || e.data !== '[' || e.isComposing) return;
   const p = ta.selectionStart, v = ta.value;
-  if (p !== ta.selectionEnd || v.slice(p - 2, p) !== '[[' || v[p - 3] === '[' || v.slice(p, p + 2) === ']]') return;
+  if (p !== ta.selectionEnd || v.slice(p - 2, p) !== '[[' || v[p - 3] === '[' || v.slice(p, p + 2) === ']]' || inCode(v.slice(0, p))) return;
   ta.value = v.slice(0, p) + ']]' + v.slice(p); ta.setSelectionRange(p, p);
+}
+// 反引号：打出开头的 ` 自动补上结尾的 `；选中文字时包起来；结尾处再打 ` 跳过；空的 `` 中间退格一起删
+function codeKeys(ta, e) {
+  if (ta.readOnly || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return false;
+  const p = ta.selectionStart, q = ta.selectionEnd, v = ta.value, done = (val, a, z = a) => { e.preventDefault(); e.stopPropagation(); ta.value = val; ta.setSelectionRange(a, z); ta.dispatchEvent(new Event('input')); return true; };
+  if (e.key === '`') {
+    if (p !== q) { if (v.slice(p, q).includes('\n')) return false; return done(v.slice(0, p) + '`' + v.slice(p, q) + '`' + v.slice(q), p + 1, q + 1); }
+    if (inCode(v.slice(0, p))) { if (v[p] === '`') { e.preventDefault(); e.stopPropagation(); ta.setSelectionRange(p + 1, p + 1); return true; } return false; }
+    if (v[p - 1] === '`' || (v[p] && !/\s/.test(v[p]))) return false;   // 连打 ``、或紧贴着文字时不补
+    return done(v.slice(0, p) + '``' + v.slice(p), p + 1);
+  }
+  if (e.key === 'Backspace' && p === q && v[p - 1] === '`' && v[p] === '`' && inCode(v.slice(0, p))) return done(v.slice(0, p - 1) + v.slice(p + 1), p - 1);
+  return false;
 }
 function pairKeys(ta, e) {
   const p = ta.selectionStart, v = ta.value;
@@ -350,7 +365,7 @@ function pairKeys(ta, e) {
 }
 function checkAc(b, ta) {
   const upto = ta.value.slice(0, ta.selectionStart);
-  const m = b.type === 'ord' ? upto.match(/\[\[([^\[\]\n|]*)(?:\]\])?$/) : null;
+  const m = b.type === 'ord' && !inCode(upto) ? upto.match(/\[\[([^\[\]\n|`]*)(?:\]\])?$/) : null;
   if (!m) return closeAc();
   const start = upto.length - m[0].length, atStart = upto.slice(0, start).trim() === '';
   const q = m[1].replace(/^PJ\//, '').trim(), P = projects(S), nq = normName(q), items = [];

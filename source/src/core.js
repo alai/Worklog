@@ -51,6 +51,16 @@ function validDate(s) {
 
 // ---- 内存索引：按版本号缓存，结构变化后首次使用时重建 ----
 const TAG_RE = /(?<![A-Za-z0-9\\])([@#])(?:\{([^}\n]+)\}|([A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*))/g;   // 名字中间允许点号：@Firstname.Lastname；句末的点不算
+// 行内代码 `...`：里面的 @ # (( [[ 都只是文字。同一行里成对的反引号才算，扫描时先把代码段换成等长的空格，位置不变
+const CODE_RE = /`[^`\n]*`/g;
+function maskCode(t) { return t.indexOf('`') < 0 ? t : t.replace(CODE_RE, (x) => ' '.repeat(x.length)); }
+function outsideCode(t, fn, keep = (x) => x) {   // 只对代码段以外的部分做 fn，代码段交给 keep
+  if (t.indexOf('`') < 0) return fn(t);
+  let out = '', i = 0, m; CODE_RE.lastIndex = 0;
+  while ((m = CODE_RE.exec(t))) { out += fn(t.slice(i, m.index)) + keep(m[0]); i = m.index + m[0].length; }
+  return out + fn(t.slice(i));
+}
+const inCode = (upto) => (upto.slice(upto.lastIndexOf('\n') + 1).split('`').length - 1) % 2 === 1;   // 光标前这一行有落单的反引号：正在代码里
 const REC_RE = new RegExp(`\\(\\((${ID_RE})\\)\\)`, 'g');   // 正文里对别的记录的引用
 const REF_RE = new RegExp(`\\[\\[PJ\\/[^\\]|\\[]+\\|(${ID_RE})\\]\\]|\\(\\((${ID_RE})\\)\\)`, 'g');
 let cache = { S: null, ver: -1 };
@@ -67,19 +77,20 @@ function index(S) {
       else if (b.type === 'ord') {
         b.own = ctx;   // 推导出的归属，随索引一起刷新
         // 反向链接不依赖引用方有没有 ID：刚写下、还没保存的记录也要立刻算上
-        if (b.text.indexOf('((') >= 0) {
+        const tx = maskCode(b.text);
+        if (tx.indexOf('((') >= 0) {
           const seen = new Set(); let r;
           REC_RE.lastIndex = 0;
-          while ((r = REC_RE.exec(b.text))) if (r[1] !== b.id && !seen.has(r[1])) { seen.add(r[1]); add(brefs, r[1], b); }
+          while ((r = REC_RE.exec(tx))) if (r[1] !== b.id && !seen.has(r[1])) { seen.add(r[1]); add(brefs, r[1], b); }
         }
         if (b.id) {
           add(byProj, ctx, b);
           // 同一条记录里同一个标签或引用出现几次都只登记一次，否则标签页会把这条记录列出好几遍
           let m; const seenTags = new Set(), seenRefs = new Set();
           TAG_RE.lastIndex = 0;
-          while ((m = TAG_RE.exec(b.text))) seenTags.add(m[1] + (m[2] || m[3]));
+          while ((m = TAG_RE.exec(tx))) seenTags.add(m[1] + (m[2] || m[3]));
           REF_RE.lastIndex = 0;
-          while ((m = REF_RE.exec(b.text))) seenRefs.add(m[1] || m[2]);
+          while ((m = REF_RE.exec(tx))) seenRefs.add(m[1] || m[2]);
           if (b.extParent) seenRefs.add(b.extParent);
           for (const t of seenTags) add(tags, t, b.id);
           for (const r of seenRefs) add(refs, r, b.id);
@@ -119,11 +130,11 @@ const RE_PURE = new RegExp(`^\\[\\[PJ\\/[^\\]|\\[]+\\|(${ID_RE})\\]\\]$`);
 
 function normalizeRefs(S, text) {
   if (text.indexOf('[[') < 0) return text;
-  return text.replace(/\[\[([^\[\]|]+)\]\]/g, (all, inner) => {
+  return outsideCode(text, (part) => part.replace(/\[\[([^\[\]|]+)\]\]/g, (all, inner) => {
     if (/^\d{4}-\d{2}-\d{2}$/.test(inner)) return all;
     const hits = matchProjects(S, inner.replace(/^PJ\//, ''));
     return hits.length === 1 ? `[[PJ/${hits[0].name}|${hits[0].id}]]` : all;
-  });
+  }));
 }
 
 // 失焦或结构操作前调用：只移动和补全字段，不改写正文
@@ -507,4 +518,4 @@ function setLife(S, id, today) {
   return { ok: true, page: b.page };
 }
 
-if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate };
+if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate, maskCode, outsideCode, inCode };
