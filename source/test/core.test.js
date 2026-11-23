@@ -148,3 +148,35 @@ console.log('ALL OK');
   const solo = S3.pages[T][0]; C.newAfter(S3, solo.key);
   console.log('heading delete OK');
 }
+{ // 同一条记录里重复出现的标签只算一次
+  const C = require('../src/core.js'), S = C.newState(), T = '2026-11-20';
+  C.loadPage(S, T, '- #call @Mandy asked @Mandy to call back, #call again\n- one @Mandy only\n- @{Li Wei} and @{Li Wei}\n', T); C.settle(S, T); C.ensureIds(S, T, T);
+  const n = (t) => C.recordsByTag(S, t).length, got = [n('@Mandy'), n('#call'), n('@Li Wei')].join(',');
+  if (got !== '2,1,1') throw new Error('duplicate tag hits: ' + got);
+  console.log('tag dedupe OK');
+}
+{ // block 引用：手写行末尾的 ((ID)) 是引用不是自己的 ID；反向链接索引；被引用的记录删除时变为软删除
+  const C = require('../src/core.js'), S = C.newState(), T1 = '2026-11-17', T2 = '2026-11-23';
+  C.loadPage(S, T1, '- 需要进一步确认方案 ABC 的可能性\n- 另一条\n', T1); C.settle(S, T1); C.ensureIds(S, T2, T1);
+  const orig = S.pages[T1][0], oid = orig.id;
+  C.loadPage(S, T2, `- ((${oid}))\n- see ((${oid}))\n- 2026-11-23 ((${oid})) -> #meeting 决定放弃 ((ABCDEFGHI1)) ^pj(INBOX)\n`, T2); C.settle(S, T2); C.ensureIds(S, T2, T2);
+  const p2 = S.pages[T2], ids = new Set(p2.map((b) => b.id));
+  if (p2.length !== 3 || ids.size !== 3 || ids.has(oid)) throw new Error('reference mistaken for own id: ' + p2.map((b) => b.id + ':' + b.text).join(' | '));
+  if (p2[0].text !== `((${oid}))` || p2[1].text !== `see ((${oid}))`) throw new Error('reference text lost: ' + p2.map((b) => b.text).join(' | '));
+  if (S.diags.length) throw new Error('diags: ' + JSON.stringify(S.diags));
+  const bl = C.index(S).brefs.get(oid) || [];
+  if (bl.length !== 3) throw new Error('backlinks: ' + bl.length);
+  const text = C.serializePage(S, T2), S2 = C.newState(); C.loadPage(S2, T1, C.serializePage(S, T1), T2); C.loadPage(S2, T2, text, T2); C.settle(S2, T2);
+  if (C.serializePage(S2, T2) !== text || S2.diags.length) throw new Error('round-trip with references');
+  const r = C.deleteBlock(S, orig.key, T2); if (!r.ok || !r.soft || !orig.del) throw new Error('referenced record must be soft-deleted: ' + JSON.stringify(r));
+  console.log('block refs OK');
+}
+{ // 项目多久没有新记录：分支里的记录和改状态的日子都算，关闭的项目不算
+  const C = require('../src/core.js'), S = C.newState();
+  C.loadPage(S, '2026-10-01', '- [[PJ/Alpha]] Project created.\n  - kickoff\n  - [[PJ/Beta]] Branch created.\n    - [DONE:2026-11-10] ship it\n- [[PJ/Gamma]] Project created.\n  - note\n', '2026-10-01');
+  C.settle(S, '2026-10-01'); C.ensureIds(S, '2026-10-01', '2026-10-01');
+  const st = C.stats(S, '2026-11-23'), by = (n) => Object.values(st.N).find((p) => p.name === n);
+  const got = ['Alpha', 'Beta', 'Gamma'].map((n) => by(n).quiet + '@' + by(n).subLast).join(',');
+  if (got !== '13@2026-11-10,13@2026-11-10,53@2026-10-01') throw new Error('quiet days: ' + got);
+  console.log('project quiet OK');
+}

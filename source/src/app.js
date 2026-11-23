@@ -9,12 +9,12 @@ const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 let S = newState(), cur = today(), readOnly = false, rendering = false, ac = null, origin = null;
 let showSide = false, prevLines = new Set(), view = 'journal', viewArg = null;
-const APP_VERSION = '0.32';
+const APP_VERSION = '0.35';
 // 外观由三项组合：THEMES 选亮暗（System 跟随系统），PALETTES 选色板，cfg.color 选着色强度（Full/Soft/Mono）。
 // 登记在这里的名字会自动出现在 Settings；对应的变量写在 style.css
 const THEMES = { light: 'Light', dark: 'Dark' };
 const PALETTES = { default: 'Default', solarized: 'Solarized' };   // 色板：和亮暗独立，style.css 里每个色板各有亮、暗两段
-const cfg = { chip: 'date', theme: 'system', nav: 'wide', stale: 7, fold: {}, lifeline: 'text', graphOpen: null, color: 'full', palette: 'default' };
+const cfg = { chip: 'date', theme: 'system', nav: 'wide', stale: 7, quiet: 14, fold: {}, lifeline: 'text', graphOpen: null, color: 'full', palette: 'default' };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('worklog-cfg') || '{}')); } catch (e) { /* 忽略 */ }
 function saveCfg() { try { localStorage.setItem('worklog-cfg', JSON.stringify(cfg)); } catch (e) { /* 忽略 */ } applyTheme(); }
 const darkMq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
@@ -91,12 +91,29 @@ function richLine(line, P, byId) {
     out += esc(line.slice(i, m.index)); i = m.index + m[0].length;
     if (m[1]) out += esc(m[1].slice(1));
     else if (m[3]) out += `<span class="ref" data-pj="${m[3]}">${esc(P[m[3]] ? P[m[3]].name : m[2])}</span>`;
-    else if (m[4]) out += `<span class="ref rec">${esc(byId[m[4]] ? byId[m[4]].text.split('\n')[0].slice(0, 24) : 'unknown record')}</span>`;
+    else if (m[4]) out += refQuote(m[4], byId);
     else if (m[5]) out += `<span class="person">${esc(m[5].replace(/[{}]/g, ''))}</span>`;   // 花括号只是文件里的写法，显示时去掉
     else if (m[6]) out += `<span class="kind">${esc(m[6].replace(/[{}]/g, ''))}</span>`;
   }
   return out + esc(line.slice(i));
 }
+// ---- block 引用 ----
+// 被引用记录第一行的纯文字：项目引用换成项目名、花括号去掉；它里面再引用别的记录时只展开一层
+function refText(b, depth = 0) {
+  const ix = index(S);
+  return b.text.split('\n')[0]
+    .replace(new RegExp(`\\(\\((${ID_RE})\\)\\)`, 'g'), (all, id) => (depth < 1 && ix.byId[id] ? '“' + refText(ix.byId[id], depth + 1) + '”' : '…'))
+    .replace(new RegExp(`\\[\\[PJ\\/([^\\]|\\[]+)\\|${ID_RE}\\]\\]`, 'g'), '$1')
+    .replace(/([@#])\{([^}\n]+)\}/g, '$1$2');
+}
+function refWhere(b) { const P = index(S).P; return b.own && b.own !== 'INBOX' && P[b.own] ? projectPath(P, b.own) : 'Inbox'; }
+// 正文里的 ((ID)) 显示成带引号的原文；悬停看日期和所属项目，点击跳回原记录
+function refQuote(id, byId) {
+  const r = byId[id];
+  if (!r) return `<span class="qref missing" title="Record ${id} not found">“unknown record”</span>`;
+  return `<span class="qref${r.del ? ' del' : ''}" data-rec="${id}" title="${esc(`${r.date} · ${refWhere(r)}${r.del ? ' · deleted' : ''} (click to open)`)}">“${esc(refText(r))}”</span>`;
+}
+
 function chipLabel(b) {
   if (cfg.chip === 'none' || !b.statusDate) return b.status;
   if (cfg.chip === 'date') return `${b.status} · ${b.statusDate.slice(5)}`;
@@ -168,8 +185,9 @@ function drawRow(b, parent, ix) {
     if (locked || b.del || b.dup || b.type === 'head') ta.readOnly = true;
     view.onclick = (e) => { if (jump(e)) return; focusBlock(b.key, b.text.length); };
     ta.onfocus = () => { row.classList.add('editing'); grow(ta); };
+    ta.onfocus = () => { ta._t0 = ta.value; };   // 记下进入编辑时的文字，退出时据此判断有没有改过
     ta.onblur = (e) => onBlur(e, b, row, parent);
-    ta.oninput = (e) => { if (ta.readOnly) return; pairBrackets(ta, e); b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); checkDate(ta); checkTag(ta); };
+    ta.oninput = (e) => { if (ta.readOnly) return; pairBrackets(ta, e); checkRef(ta, e, b); b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); checkDate(ta); checkTag(ta); };
     ta.addEventListener('keydown', (e) => { if (!ta.readOnly && pairKeys(ta, e)) { b.text = ta.value; grow(ta); touch(false); checkAc(b, ta); } });
     ta.onkeydown = (e) => onKey(e, b, ta);
     body.appendChild(ta);
@@ -202,6 +220,7 @@ function drawRow(b, parent, ix) {
   if (b.type === 'ord' && !parent && hasContent(b)) row.appendChild(el('span', 'tag dash', 'Inbox'));
   if (b.extParent) row.appendChild(el('span', 'tag line', '↳ ' + (ix.byId[b.extParent] ? ix.byId[b.extParent].text.split('\n')[0].slice(0, 16) : b.extParent)));
   if (b.date !== cur) row.appendChild(el('span', 'tag line', b.date.slice(5)));
+  if (b.id && b.type === 'ord' && !b.del) { const bl = (ix.brefs.get(b.id) || []).filter((x) => !x.del); if (bl.length) row.appendChild(backlinkBtn(b, bl)); }   // 被别的记录引用
   if (b.del) {
     row.appendChild(el('span', 'tag warn', 'deleted ' + b.del.slice(5)));
     if (!readOnly) { const un = el('button', 'mini', 'Restore'); un.onclick = () => { b.del = null; bump(S); touch(true); render(); }; row.appendChild(un); }
@@ -230,12 +249,14 @@ function focusBlock(key, pos) {
 function onBlur(e, b, row, parent) {
   if (rendering || !row.isConnected) return;
   closeAc(); origin = null;
-  const v = S.ver;
+  const v = S.ver, ta = e.target;
+  // 只改了文字时 commitBlock 不一定让索引失效；这里补上，标签页、补全候选、反向链接才会立刻更新，也会立即保存
+  if (!readOnly && ta && ta._t0 !== undefined && ta._t0 !== ta.value) { ta._t0 = ta.value; bump(S); }
   if (!readOnly) commitBlock(S, b, today());
   const ix = index(S);
   if (e.relatedTarget && row.contains(e.relatedTarget)) { row.classList.remove('editing'); fillView(row.querySelector('.view'), b, ix); if (b.type === 'ord') row.querySelector('textarea').value = b.text; }
   else { row.replaceWith(drawRow(b, parent, ix)); markCur(); }
-  if (v !== S.ver) touch(true);
+  if (v !== S.ver) { touch(true); refreshBacklinks(); }
 }
 
 // 快捷键循环切换：进入新状态写当天日期，切回本次编辑开始时的状态则恢复原日期
@@ -360,7 +381,8 @@ function drawMenu(box, ta, rows, sel, onPick) {
   rows.forEach((it, i) => {
     const b = el('button', 'ac-item' + (i === sel ? ' on' : '') + (it.create ? ' create' : ''));
     b.setAttribute('role', 'option'); b.setAttribute('aria-selected', String(i === sel));
-    b.appendChild(el('span', 'ac-title', it.title));
+    if (it.lead) b.appendChild(el('span', 'ac-date', it.lead));
+    const tt = el('span', 'ac-title'); if (it.html) tt.innerHTML = it.html; else tt.textContent = it.title; b.appendChild(tt);
     if (it.sub && (it.create || !shared)) b.appendChild(el('span', 'ac-sub', it.sub));
     if (it.tip) b.title = it.tip;
     b.onmousedown = (e) => { e.preventDefault(); onPick(i); };
@@ -417,8 +439,16 @@ async function go(date, focusKey) {
   cur = date; prevLines = new Set(); navCur = null; navIdx = null;
   if (view !== 'journal') { view = 'journal'; $('#journal').hidden = false; $('#view').hidden = true; drawNav(); }
   $('#file').textContent = `data/${cur}.md`;
-  if (FS.files.has(date) && !dirty.has(date) && await FS.changed(date)) { await reloadPage(date); toast('Loaded the newer version from disk'); }
+  // 先按内存里的内容立刻画出来：标题、正文、文件名、Source 永远是同一天。
+  // 以前是先查磁盘再画，查磁盘一出错（比如应用开着时数据文件夹被替换，旧的文件句柄失效）就跳过了重画
   render(focusKey);
+  if (!FS.files.has(date) || dirty.has(date)) return;
+  try {
+    // 文件被外部编辑器改过就重新载入；等待期间如果已经翻到别的日期，就不再管这一天
+    if (await FS.changed(date) && cur === date && !dirty.has(date)) { await reloadPage(date); toast('Loaded the newer version from disk'); }
+  } catch (e) {
+    if (cur === date && !BK.hold) banner(`Could not read data/${date}.md from disk (${e.message}). The folder may have been moved or replaced while Worklog was open.`, [['Rescan workspace', () => openWorkspace(() => true)], ['Dismiss', () => banner()]]);
+  }
 }
 
 // ---- 启动 ----

@@ -47,6 +47,21 @@
     nav('Projects');
     log.push('projects: ' + qa('.pj.top').map((x) => x.querySelector('.pj-head').textContent).join(' || '));
     log.push('lifeline events: ' + qa('.pj-body .rec').length);
+    { const st = stats(S, today()), want = st.tops.filter((id) => !st.N[id].life).length, navCount = (qa('.nav-item').find((x) => x.querySelector('.nav-label').textContent === 'Projects').querySelector('.count') || {}).textContent;
+      const q0 = cfg.quiet; cfg.quiet = 1; drawView(); const qs = qa('.pj-head .quiet').map((x) => x.textContent + ' [' + x.title.replace(/\d{4}-\d\d-\d\d/, 'DATE') + ']');
+      cfg.quiet = 365; drawView(); const none = qa('.pj-head .quiet').length; cfg.quiet = q0; drawView();
+      log.push('projects nav count=' + navCount + ' (open top-level=' + want + ') | quiet>=1: ' + qs.join(' ; ') + ' | quiet>=365: ' + none); }
+    { const press = (k) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: 'Key' + k.toUpperCase(), bubbles: true, cancelable: true })); if (act().blur) act().blur(); const t0 = q('#view .icon-btn.foldall').title; press('z'); const f1 = qa('.pj.top').filter((x) => !x.querySelector('.pj-body')).length + '/' + qa('.pj.top').length, t1 = q('#view .icon-btn.foldall').title, sep = getComputedStyle(q('.pj.top')).borderBottomStyle;
+      press('z'); const f2 = qa('.pj.top').filter((x) => !x.querySelector('.pj-body')).length; log.push('fold all: ' + t0 + ' -> Z folded=' + f1 + ' tip=' + t1 + ' separator=' + sep + ' | Z again folded=' + f2); }
+    { const press = (k) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: 'Key' + k.toUpperCase(), bubbles: true, cancelable: true }));
+      const g0 = cfg.tagGroup, w0 = cfg.workGroup, out = [];
+      for (const [v, arg, key] of [['tag', '@Mandy', 'tagGroup'], ['working', undefined, 'workGroup']]) {
+        cfg[key] = false; show(v, arg); const flat = !!q('#view .icon-btn.foldall');
+        cfg[key] = true; show(v, arg); if (act().blur) act().blur(); const heads = qa('#view .grp-head').length, tip0 = (q('#view .icon-btn.foldall') || {}).title;
+        press('z'); const shut = qa('#view .grp-head.shut').length, recs = qa('#view .rec').length, tip1 = q('#view .icon-btn.foldall').title;
+        press('z'); out.push(v + ': ungrouped button=' + flat + ' | grouped heads=' + heads + ' tip=' + tip0 + ' -> Z shut=' + shut + ' records shown=' + recs + ' tip=' + tip1 + ' -> Z shut=' + qa('#view .grp-head.shut').length);
+      }
+      cfg.tagGroup = g0; cfg.workGroup = w0; log.push('group fold all: ' + out.join(' || ')); nav('Projects'); }
     qa('.mini.act').find((x) => x.textContent === 'Archive').click(); await sleep(30);
     log.push('archive refused toast: ' + q('#toast').textContent);
     q('.fold').click(); log.push('folded head: ' + q('.pj-head').textContent + ' body=' + qa('.pj-body').length);
@@ -144,6 +159,14 @@
     nav('Inbox'); if (act().blur) act().blur(); const i0 = q('.icon-btn.sort').title; press('s'); log.push('sort inbox + S key: ' + i0 + ' -> ' + q('.icon-btn.sort').title); press('s');
     press('f'); const n1 = q('#nav').classList.contains('narrow'), tt = q('#nav-toggle').title; press('f'); log.push('F key: narrow=' + n1 + ' tip=' + tt + ' back=' + !q('#nav').classList.contains('narrow'));
     nav('Projects'); if (act().blur) act().blur(); press('j'); const ht = q('.pj-head.cur .goto').title, hv = getComputedStyle(q('.pj-head.cur .goto')).opacity; press('o'); log.push('O on heading: tip=' + ht + ' visible=' + hv + ' -> view=' + view + ' title=' + q('.pj-head.page .pj-name').textContent + ' page icon=' + !!q('.pj-head.page .goto'));
+    { // 项目页：H 隐藏 TODO / WAIT / DONE，只留事件；再按一次恢复，设置会记住
+      const after = () => { const h = q('#view h2.rec-head'), out = []; for (let n = h && h.nextElementSibling; n; n = n.nextElementSibling) if (n.classList.contains('rec')) out.push(n); return out; };
+      const h0 = q('#view h2.rec-head').textContent, all = after(), st0 = all.filter((r) => r.querySelector('.status')).length, tip0 = q('.rec-head .icon-btn.tasks').title;
+      press('h'); const h1 = q('#view h2.rec-head').textContent, left = after(), st1 = left.filter((r) => r.querySelector('.status')).length, pressed = q('.rec-head .icon-btn.tasks').getAttribute('aria-pressed'), saved = cfg.pageEvents;
+      const openKept = q('#view h2').textContent;
+      q('.rec-head .icon-btn.tasks').click(); const h2 = q('#view h2.rec-head').textContent;
+      log.push('project hide tasks: "' + h0 + '" with status=' + st0 + ' tip=' + tip0 + ' | H -> "' + h1 + '" rows=' + left.length + '/' + all.length + ' with status=' + st1 + ' pressed=' + pressed + ' saved=' + saved + ' first h2 still "' + openKept + '" | click -> "' + h2 + '" saved=' + cfg.pageEvents);
+    }
     nav('Working'); if (act().blur) act().blur(); press('/'); const foc = act().id; const setQ = async (x) => { q('#q').value = x; q('#q').dispatchEvent(new Event('input')); await sleep(220); };
     await setQ('gpu'); const s1 = view + ':' + q('#view h1').textContent; await setQ('g'); const s2 = q('#view h1').textContent; await setQ(''); const s3 = view;
     await setQ('gpu'); q('#q').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(30);
@@ -214,6 +237,68 @@
     log.push('gg/G/M: items=' + nItems + ' G->' + last + ' one g stays=' + (afterOneG === last) + ' gg->' + first + ' slow gg (700ms apart) stays=' + (slowGG === first) + ' g,j,g not gg=' + (brokenGG !== 0) + ' | M->' + mi + ' visible=' + !!(mr && mr.top >= vb.top && mr.bottom <= vb.bottom) + ' | P on search page does nothing=' + (pOnSearch === 0));
     await go('2026-11-13'); if (act().blur) act().blur(); const jRows = navItems(); press('G', { shiftKey: true }); const jl = jRows.indexOf(q('.cur')); press('g'); press('g'); log.push('gg/G journal: rows=' + jRows.length + ' G->' + jl + ' gg->' + jRows.indexOf(q('.cur')));
     log.push('version: ' + qa('#view').length + ' ' + APP_VERSION);
+    // 跳转日期时，某一天的文件读不到（比如数据文件夹在应用开着时被替换）：标题、正文、文件名、Source 仍是同一天，并给出提示
+    { await go('2026-11-14'); await sleep(50); if (!showSide) q('#side-toggle').click();
+      const ent = FS.files.get('2026-11-13'), keep = ent.handle;
+      ent.handle = { getFile: async () => { const x = new Error('A requested file or directory could not be found'); x.name = 'NotFoundError'; throw x; } };
+      q('#prev').click(); await sleep(250);
+      const st = 'file=' + q('#file').textContent.slice(5, 15) + ' title=' + q('#title').textContent.slice(0, 10) + ' source=' + (q('#raw').textContent.match(/Journal (\S+)/) || [])[1] + ' body has 11-13 record=' + q('#editor').textContent.includes('GPU');
+      const bn = q('#banner').hidden ? 'none' : q('#banner').textContent.slice(0, 44);
+      ent.handle = keep; banner(); q('#side-toggle').click();
+      log.push('nav onto unreadable file: ' + st + ' banner="' + bn + '…"'); }
+    // 只改文字的编辑：列表页原地编辑也要写回文件，索引立即更新（0.32 之前漏掉了）
+    { show('working'); await sleep(50); const r0 = q('#view .rec.editable'); r0.click(); ta = act(); const was = ta.value; ta.value = was + ' @Zed'; ta.dispatchEvent(new Event('input')); ta.blur(); await sleep(150); await saving;
+      const saved = [...__store.values()].some((f) => f.text && f.text.includes(' @Zed'));
+      log.push('text-only edit: list inline saved to file=' + saved + ' tag index updated=' + (recordsByTag(S, '@Zed').length === 1));
+      const r1 = qa('#view .rec.editable').find((x) => x.textContent.includes('@Zed')); r1.click(); ta = act(); ta.value = was; ta.dispatchEvent(new Event('input')); ta.blur(); await sleep(150); await saving; }
+    // ---- block 引用 ----
+    { await go('2031-07-01'); q('#add').click(); ta = act();
+      const tIn2 = (x) => { const p0 = ta.selectionStart; ta.value = ta.value.slice(0, p0) + x + ta.value.slice(p0); ta.setSelectionRange(p0 + x.length, p0 + x.length); ta.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: x.slice(-1) })); };
+      const kd2 = (k) => { const ev = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }); ta.dispatchEvent(ev); return ev.defaultPrevented; };
+      const rmenu = () => q('#rac').hidden ? 'closed' : qa('#rac .ac-item').map((x) => x.textContent).join(' | ');
+      tIn2('需要进一步确认方案 ABC 的可能性'); kd2('Enter'); await sleep(30); ta = act();   // 原记录（还没保存，也就还没有 ID）
+      tIn2('('); tIn2('(');
+      const paired = ta.value + ' @' + ta.selectionStart, recent = rmenu().slice(0, 40);
+      tIn2('方案 ABC'); const m1 = rmenu(); tIn2(' 可能'); const m2 = rmenu();
+      const prevented = kd2('Enter'); await sleep(30);
+      const own = S.pages[cur].find((x) => x.text.startsWith('需要进一步')), refId = (ta.value.match(/\(\(([A-Za-z0-9_-]{10})\)\)/) || [])[1];
+      log.push('ref (( pair: "' + paired + '" recent shows=' + recent);
+      log.push('ref search: "方案 ABC" -> ' + m1.slice(0, 60) + ' | "方案 ABC 可能" -> ' + m2.slice(0, 40) + ' | Enter prevented=' + prevented + ' -> text="' + ta.value.replace(refId, 'ID') + '" original got id=' + (!!own.id && own.id === refId) + ' caret at end=' + (ta.selectionStart === ta.value.length));
+      tIn2(' -> #decision 放弃'); const typeover = (() => { tIn2(' x(('); tIn2('zz'); const r = kd2(')'); return r && ta.value.slice(ta.selectionStart - 1, ta.selectionStart) === ')'; })();
+      ta.value = ta.value.replace(' x((zz))', ''); ta.dispatchEvent(new Event('input'));
+      tIn2(' (('); const bs = kd2('Backspace'); log.push('ref keys: ) types over=' + typeover + ' backspace removes pair=' + bs + ' value ends="' + ta.value.slice(-6) + '"');
+      const keepText = ta.value; tIn2('(XYZW'); const none = rmenu(); kd2('Escape'); log.push('ref no match: ' + none + ' esc closes=' + q('#rac').hidden + ' still editing=' + (act() === ta));
+      ta.value = keepText.replace(/ \($/, ''); ta.dispatchEvent(new Event('input')); ta.blur(); await sleep(150); await saving;
+      const quote = qa('#editor .qref').map((x) => x.textContent + (x.title ? ' [' + x.title.replace(/\d{4}-\d\d-\d\d/, 'DATE') + ']' : ''));
+      const blBtn = q('#editor .bl');
+      log.push('ref display: ' + quote.join(' ; ') + ' | backlink=' + (blBtn && blBtn.textContent) + ' file has ref=' + /\(\([A-Za-z0-9_-]{10}\)\) -> #decision/.test((__store.get('2031-07-01.md') || {}).text || '') + ' file=' + JSON.stringify(((__store.get('2031-07-01.md') || {}).text || '').split('\n').slice(3).join(' / ').replace(/\(\([A-Za-z0-9_-]{10}\)\)/g, '((ID))').slice(0, 160)));
+      blBtn.click(); await sleep(30); const bl = qa('#blp .ac-item').map((x) => x.textContent).join(' | '); const blOpen = !q('#blp').hidden;
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); log.push('ref backlinks: open=' + blOpen + ' rows="' + bl + '" esc closes=' + q('#blp').hidden);
+      { // 键盘：焦点在被引用的记录上按 R 打开列表，J 下移，再按 R 关闭；列表页同样有效
+        const key = (k, sh) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: 'Key' + k.toUpperCase(), shiftKey: !!sh, bubbles: true, cancelable: true }));
+        const isOrig = () => { const c = q('#editor .cur'); const t = c && c.querySelector('.view').textContent; return !!t && t.includes('需要进一步') && !t.includes('“'); };
+        key('g'); key('g'); for (let i = 0; i < 30 && !isOrig(); i++) key('j');
+        key('r'); await sleep(20); const kOpen = !q('#blp').hidden, kRows = qa('#blp .ac-item').length; key('j'); const kSel = qa('#blp .ac-item').findIndex((x) => x.classList.contains('on')); const stay = isOrig();
+        key('r'); const kClosed = q('#blp').hidden;
+        for (let i = 0; i < 30 && q('#editor .cur') && !q('#editor .cur .view').textContent.startsWith('看'); i++) key('j');
+        key('r'); const noBl = q('#blp').hidden;
+        show('search', '需要进一步'); await sleep(50); if (act().blur) act().blur();   // 搜索框里按的键归搜索框
+        const lrow = qa('#view .rec').find((x) => x.textContent.includes('需要进一步') && x.querySelector('.bl'));
+        for (let i = 0; i < 20 && !(q('#view .rec.cur') && q('#view .rec.cur') === lrow); i++) key('j');
+        key('r'); await sleep(20); const lOpen = !q('#blp').hidden; key('r');
+        log.push('ref R key: on original open=' + kOpen + ' rows=' + kRows + ' J moves in list sel=' + kSel + ' cursor kept=' + stay + ' R closes=' + kClosed + ' | other record stays closed=' + noBl + ' | list view: marker=' + (lrow && lrow.querySelector('.bl').textContent) + ' tip="' + (lrow && lrow.querySelector('.bl').title) + '" R opens=' + lOpen + ' closed=' + q('#blp').hidden);
+        await go('2031-07-01');
+      }
+      // 改原记录，引用处同步变；点击引文跳回原记录
+      qa('#editor .view').find((x) => x.textContent.startsWith('需要进一步')).click(); ta = act(); ta.value = '需要进一步确认方案 ABC 和 D 的可能性'; ta.dispatchEvent(new Event('input')); ta.blur(); await sleep(80);
+      log.push('ref live update: ' + q('#editor .qref').textContent);
+      await go('2031-07-02'); q('#add').click(); ta = act(); tIn2('看 (('); tIn2('ABC 和 D'); kd2('Enter'); ta.blur(); await sleep(80);
+      q('#editor .qref').click(); await sleep(80); log.push('ref click jumps: page=' + cur + ' focused original=' + (act().value || '').startsWith('需要进一步确认'));
+      if (act().blur) act().blur();
+      show('search', '看'); await sleep(50); log.push('ref in list views: ' + qa('#view .qref').map((x) => x.textContent).join(' ; '));
+      await go('2031-07-01'); const delBtn = qa('#editor .row').find((x) => x.querySelector('.view').textContent.startsWith('需要进一步')).querySelector('.mini.del'); delBtn.click(); await sleep(80);
+      log.push('ref delete original: toast="' + q('#toast').textContent + '" quotes=' + qa('#editor .qref').map((x) => x.className + ':' + x.textContent).join(' ; ') + ' orig.del=' + (S.pages[cur].find((x) => x.text.startsWith('需要进一步')) || {}).del);
+    }
     // ---- backups ----
     const bkMap = () => window.__subs.get('backups') || new Map(), bkNames = () => [...bkMap().keys()].sort();
     const T0 = today(), mdCount = () => [...__store.keys()].filter((k) => /\.md$/.test(k)).length;

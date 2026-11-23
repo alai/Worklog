@@ -51,11 +51,12 @@ function validDate(s) {
 
 // ---- 内存索引：按版本号缓存，结构变化后首次使用时重建 ----
 const TAG_RE = /(?<![A-Za-z0-9\\])([@#])(?:\{([^}\n]+)\}|([A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*))/g;   // 名字中间允许点号：@Firstname.Lastname；句末的点不算
+const REC_RE = new RegExp(`\\(\\((${ID_RE})\\)\\)`, 'g');   // 正文里对别的记录的引用
 const REF_RE = new RegExp(`\\[\\[PJ\\/[^\\]|\\[]+\\|(${ID_RE})\\]\\]|\\(\\((${ID_RE})\\)\\)`, 'g');
 let cache = { S: null, ver: -1 };
 function index(S) {
   if (cache.S === S && cache.ver === S.ver) return cache;
-  const P = {}, byId = {}, tags = new Map(), refs = new Map(), byProj = new Map();
+  const P = {}, byId = {}, tags = new Map(), refs = new Map(), byProj = new Map(), brefs = new Map();   // brefs：被 ((ID)) 引用的记录 → 引用它的记录
   const add = (map, k, v) => { let a = map.get(k); if (!a) map.set(k, a = []); a.push(v); };
   const go = (list, ctx, page) => {
     for (const b of list) {
@@ -65,21 +66,30 @@ function index(S) {
       if (b.type === 'proj' || b.type === 'branch') { if (b.id) P[b.id] = { id: b.id, name: b.text, type: b.type, parent: b.owner, life: b.life, date: b.date }; }
       else if (b.type === 'ord') {
         b.own = ctx;   // 推导出的归属，随索引一起刷新
+        // 反向链接不依赖引用方有没有 ID：刚写下、还没保存的记录也要立刻算上
+        if (b.text.indexOf('((') >= 0) {
+          const seen = new Set(); let r;
+          REC_RE.lastIndex = 0;
+          while ((r = REC_RE.exec(b.text))) if (r[1] !== b.id && !seen.has(r[1])) { seen.add(r[1]); add(brefs, r[1], b); }
+        }
         if (b.id) {
           add(byProj, ctx, b);
-          let m;
+          // 同一条记录里同一个标签或引用出现几次都只登记一次，否则标签页会把这条记录列出好几遍
+          let m; const seenTags = new Set(), seenRefs = new Set();
           TAG_RE.lastIndex = 0;
-          while ((m = TAG_RE.exec(b.text))) add(tags, m[1] + (m[2] || m[3]), b.id);
+          while ((m = TAG_RE.exec(b.text))) seenTags.add(m[1] + (m[2] || m[3]));
           REF_RE.lastIndex = 0;
-          while ((m = REF_RE.exec(b.text))) add(refs, m[1] || m[2], b.id);
-          if (b.extParent) add(refs, b.extParent, b.id);
+          while ((m = REF_RE.exec(b.text))) seenRefs.add(m[1] || m[2]);
+          if (b.extParent) seenRefs.add(b.extParent);
+          for (const t of seenTags) add(tags, t, b.id);
+          for (const r of seenRefs) add(refs, r, b.id);
         }
       }
       go(b.children, childCtx(b, ctx), page);
     }
   };
   for (const d in S.pages) go(S.pages[d], 'INBOX', d);
-  return (cache = { S, ver: S.ver, P, byId, tags, refs, byProj });
+  return (cache = { S, ver: S.ver, P, byId, tags, refs, byProj, brefs });
 }
 function projects(S) { return index(S).P; }
 function recordsByTag(S, tag) { const ix = index(S); return (ix.tags.get(tag) || []).map((id) => ix.byId[id]); }
@@ -191,7 +201,9 @@ const RE_DEL = new RegExp(`^\\^del\\((${DATE_RE})\\)$`);
 function parseHeader(S, str, date, today, out, line) {
   const bad = (msg) => { out.diags.push({ line, level: 'error', msg }); return null; };
   const takeStatus = (o, m) => { o.status = m[1]; if (m[2] && validDate(m[2])) o.statusDate = m[2]; else { o.statusDate = today; out.needsWrite = true; } };
-  const m = str.match(RE_TAIL);
+  let m = str.match(RE_TAIL);
+  // 规范行总以日期开头。没有日期的行是手写的：行尾的 ((ID)) 是正文里对别的记录的引用，不是它自己的 ID
+  if (m && !m[3].trim() && !RE_LEAD_DATE.test(m[1])) m = null;
   if (m) {   // 已有 ID 的规范行
     let stored = null, pr = null, del = null, x;
     for (const t of m[3].trim().split(/\s+/)) {
@@ -448,13 +460,14 @@ let scache = { S: null, ver: -1, today: null };
 function stats(S, today) {
   if (scache.S === S && scache.ver === S.ver && scache.today === today) return scache;
   const ix = index(S), N = {}, open = [], inbox = [];
-  for (const id in ix.P) N[id] = { ...ix.P[id], kids: [], todo: 0, wait: 0, events: [] };
+  for (const id in ix.P) N[id] = { ...ix.P[id], kids: [], todo: 0, wait: 0, events: [], last: ix.P[id].date || '' };
   for (const id in N) { const p = N[id]; if (p.type === 'branch' && N[p.parent]) N[p.parent].kids.push(id); }
   for (const [own, list] of ix.byProj) {
     const n = N[own];
     for (const b of list) {
       if (b.del) continue;
       if (own === 'INBOX') inbox.push(b);
+      if (n) { const d = b.statusDate && b.statusDate > b.date ? b.statusDate : b.date; if (d && d > n.last) n.last = d; }   // 最近一次有记录或改状态的日子
       if (b.status === 'TODO' || b.status === 'WAIT') { open.push(b); if (n) { if (b.status === 'TODO') n.todo++; else n.wait++; } }
       else if (!b.status && n) n.events.push(b);
     }
@@ -464,8 +477,9 @@ function stats(S, today) {
     const p = N[id];
     p.closed = closedAbove || !!p.life;
     p.events.sort(cmp); p.kids.sort((a, b) => cmp(N[a], N[b]));
-    p.subTodo = p.todo; p.subWait = p.wait; p.subEvents = p.events.length;
-    if (depth < 30) for (const k of p.kids) { roll(k, p.closed, depth + 1); p.subTodo += N[k].subTodo; p.subWait += N[k].subWait; p.subEvents += N[k].subEvents; }
+    p.subTodo = p.todo; p.subWait = p.wait; p.subEvents = p.events.length; p.subLast = p.last;
+    if (depth < 30) for (const k of p.kids) { roll(k, p.closed, depth + 1); p.subTodo += N[k].subTodo; p.subWait += N[k].subWait; p.subEvents += N[k].subEvents; if (N[k].subLast > p.subLast) p.subLast = N[k].subLast; }
+    p.quiet = p.closed || !p.subLast ? 0 : Math.max(0, daysBetween(p.subLast, today));   // 包括分支在内，多少天没有新记录
     p.status = p.life ? (p.type === 'proj' ? 'archived' : 'completed') : (p.subTodo + p.subWait ? 'ongoing' : 'ready');
     p.days = daysBetween(p.date, p.life || today) + 1;
   };

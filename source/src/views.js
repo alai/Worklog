@@ -5,7 +5,7 @@ const moreOpen = new Set();
 const icon = (ch) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="12" y="16.2" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor">${ch}</text></svg>`;
 
 function drawNav() {
-  const st = stats(S, today()), counts = { working: st.open.length, issues: S.diags.length }, box = $('#nav-items');
+  const st = stats(S, today()), counts = { working: st.open.length, projects: st.tops.filter((id) => !st.N[id].life).length, issues: S.diags.length }, box = $('#nav-items');
   $('#nav').classList.toggle('narrow', cfg.nav === 'narrow');
   $('#nav-toggle').textContent = cfg.nav === 'narrow' ? '»' : '«';
   tip($('#nav-toggle'), cfg.nav === 'narrow' ? 'Expand sidebar' : 'Collapse sidebar', 'F');
@@ -28,6 +28,8 @@ function show(v, arg) {
 
 // 点到标签去标签页，点到项目引用去项目页
 function jump(e) {
+  const rr = e.target.closest('[data-rec]');
+  if (rr) { const r = index(S).byId[rr.dataset.rec]; if (r) { go(r.page, r.key); return true; } }
   const t = e.target.closest('.person,.kind'), p = e.target.closest('[data-pj]');
   if (t) { show('tag', t.textContent.replace(/[{}]/g, '')); return true; }
   if (p && index(S).P[p.dataset.pj]) { show('project', p.dataset.pj); return true; }
@@ -59,6 +61,7 @@ function recLine(b, ix, o = {}) {
     body.appendChild(p);
   }
   if (o.action) { const x = el('button', 'mini', o.action[0]); x.onclick = (e) => { e.stopPropagation(); o.action[1](); }; r.appendChild(x); }
+  if (b.id && b.type === 'ord' && !b.del) { const bl = (ix.brefs.get(b.id) || []).filter((x) => !x.del); if (bl.length) r.appendChild(backlinkBtn(b, bl)); }   // 被别的记录引用
   const j = openBtn('Open in journal', () => go(b.page, b.key));
   r.appendChild(j);
   const editable = !readOnly && b.type === 'ord' && !b.del && !lockedBlock(b, stats(S, today()));
@@ -73,7 +76,7 @@ function editRec(r, t, b, o) {
   origin = { key: b.key, status: b.status, date: b.statusDate };
   navIdx = navItems().indexOf(r); setCur(r);
   r.classList.add('editing'); t.textContent = ''; t.appendChild(ta); grow(ta);
-  ta.oninput = () => { grow(ta); checkDate(ta); checkTag(ta); };
+  ta.oninput = (e) => { checkRef(ta, e, b); grow(ta); checkDate(ta); checkTag(ta); };
   ta.onkeydown = (e) => {
     if (e.isComposing) return;
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {   // 和 Journal 一样循环切换状态
@@ -87,7 +90,7 @@ function editRec(r, t, b, o) {
     if (!r.isConnected) return;
     origin = null;
     if (!ta.value.trim()) { b.text = before; toast('Empty text ignored. Delete records in the journal.'); }
-    else { b.text = ta.value; commitBlock(S, b, today()); }
+    else { b.text = ta.value; commitBlock(S, b, today()); if (b.text !== before) bump(S); }   // 只改了文字也要保存：以前这里漏掉了，改动只留在内存里
     const opt = { ...o, noStatus: false, stale: false };
     if (o.age != null && b.statusDate) { opt.age = Math.max(0, daysBetween(b.statusDate, today())); opt.stale = (b.status === 'TODO' || b.status === 'WAIT') && opt.age >= cfg.stale; }
     const fresh = recLine(b, index(S), opt);
@@ -143,14 +146,29 @@ function pjHead(id, st, ix, folded, onFold, count) {
   if (folded && count) head.appendChild(el('span', 'pj-count', `(${p.subEvents})`));
   const m = [`(${p.days}) days`]; if (p.subTodo) m.push(`(${p.subTodo}) todos`); if (p.subWait) m.push(`(${p.subWait}) waiting`);
   const tail = el('span', 'pj-tail');   // 胶囊和平时隐藏的打开图标绑在一起换行，免得图标单独占一行留下空白
+  if (p.quiet >= cfg.quiet) tail.appendChild(tip(el('span', 'quiet', `quiet ${p.quiet}d`), `No new records for ${p.quiet} days (last ${p.subLast})`));
   tail.append(el('span', 'cap ' + p.status, p.status), openBtn('Open project page', () => show('project', id), 'in'));
   head.append(el('span', 'pj-meta', m.join(' · ')), tail);
   const parentClosed = p.type === 'branch' && st.N[p.parent] && st.N[p.parent].closed;
   if (!readOnly && !parentClosed) { const a = el('button', 'mini act', p.life ? (p.type === 'proj' ? 'Restore' : 'Reopen') : (p.type === 'proj' ? 'Archive' : 'Complete')); a.onclick = () => life(id); head.append(el('span', 'grow'), a); }
   return head;
 }
+// 中间一条横线，箭头朝外是展开，朝里是收起
+const foldAllIcon = (expand) => `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="${expand ? 'M7 5.5l3-3 3 3M7 14.5l3 3 3-3' : 'M7 2.5l3 3 3-3M7 17.5l3-3 3 3'}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/></svg>`;
+// 全部收起 / 全部展开：收起只收顶层项目；展开时连分支一起打开
+function foldAllBtn(ids, st) {
+  const allFolded = ids.every((id) => cfg.fold[id]), g = el('button', 'icon-btn foldall');
+  g.innerHTML = `${foldAllIcon(allFolded)}`;
+  tip(g, allFolded ? 'Expand all projects' : 'Collapse all projects', 'Z');
+  g.onclick = () => {
+    if (allFolded) { for (const t of ids) for (const [id] of subtree(t, st)) delete cfg.fold[id]; }
+    else for (const id of ids) cfg.fold[id] = 1;
+    saveCfg(); navIdx = null; drawView();
+  };
+  return g;
+}
 function drawProject(id, st, ix, top) {
-  const p = st.N[id], folded = !!cfg.fold[id], node = el('div', 'pj' + (top ? ' top' : ''));
+  const p = st.N[id], folded = !!cfg.fold[id], node = el('div', 'pj' + (top ? ' top acc' + (folded ? '' : ' open') : ''));
   node.appendChild(pjHead(id, st, ix, folded, () => { if (folded) delete cfg.fold[id]; else cfg.fold[id] = 1; saveCfg(); drawView(); }, true));
   if (folded) return node;
   const body = el('div', 'pj-body'), ev = p.events, cut = ev.length > 12 && !moreOpen.has(id) ? ev.length - 10 : 0, rev = newest('projOrder', false);
@@ -218,12 +236,24 @@ function drawProjectPage(root, id, st, ix) {
   if (!open.length) root.appendChild(empty('Nothing open.'));
   for (const b of open) { const age = Math.max(0, daysBetween(b.statusDate || b.date, t)); root.appendChild(recLine(b, ix, { path: b.own !== id, age, stale: age >= cfg.stale, short: true })); }
   if (p.kids.length) { root.appendChild(el('h2', null, `Branches (${p.kids.length})`)); for (const k of p.kids) root.appendChild(pjHead(k, st, ix, false, null, false)); }
-  root.appendChild(el('h2', null, `Records (${recs.length})`));
+  // 隐藏 TODO / WAIT / DONE 之后，剩下的就是这个项目的事件经过
+  const hide = !!cfg.pageEvents, shown = hide ? recs.filter((b) => !b.status) : recs, h2 = el('h2', 'rec-head', `Records (${shown.length})`);
+  if (hide && shown.length < recs.length) h2.appendChild(el('span', 'rec-hidden', `${recs.length - shown.length} tasks hidden`));
+  if (recs.length) h2.appendChild(taskBtn(hide));
+  root.appendChild(h2);
   if (!recs.length) return root.appendChild(empty('No records yet.'));
-  recs.sort(pageNew ? byDateDesc : byDateAsc);
+  if (!shown.length) return root.appendChild(empty('Only tasks here. Press H to show them.'));
+  shown.sort(pageNew ? byDateDesc : byDateAsc);
   let day = null;
-  for (const b of recs.slice(0, 400)) { if (b.date !== day) root.appendChild(el('div', 'day', day = b.date)); const r = recLine(b, ix, { path: b.own !== id }); r.firstChild.remove(); root.appendChild(r); }
-  if (recs.length > 400) root.appendChild(empty(`${recs.length - 400} ${pageNew ? 'older' : 'newer'} records not shown.`));
+  for (const b of shown.slice(0, 400)) { if (b.date !== day) root.appendChild(el('div', 'day', day = b.date)); const r = recLine(b, ix, { path: b.own !== id }); r.firstChild.remove(); root.appendChild(r); }
+  if (shown.length > 400) root.appendChild(empty(`${shown.length - 400} ${pageNew ? 'older' : 'newer'} records not shown.`));
+}
+function taskBtn(hide) {
+  const g = el('button', 'icon-btn tasks');
+  g.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3.5" width="4" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.6 5.6l.9.9 1.6-1.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 5.5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M2.5 13.5h15M2.5 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/></svg>';
+  tip(g, hide ? 'Show todo, wait and done records' : 'Hide todo, wait and done records', 'H'); g.setAttribute('aria-pressed', String(hide));
+  g.onclick = () => { cfg.pageEvents = !hide; saveCfg(); drawView(); };
+  return g;
 }
 
 // ---- 按项目分栏：栏的顺序跟项目树一致（项目、子项目各一栏），栏内保持传入的顺序；Inbox 放最后 ----
@@ -241,7 +271,7 @@ function drawGroups(root, list, st, ix, opt) {
   for (const k of groups.keys()) if (k !== 'INBOX' && !order.includes(k)) order.push(k);
   if (groups.has('INBOX')) order.push('INBOX');
   for (const k of order) {
-    const fk = view + ':' + (viewArg || '') + ':' + k, folded = grpFold.has(fk), h = el('h3', 'group grp-head'), items = groups.get(k), f = foldBtn(folded);
+    const fk = view + ':' + (viewArg || '') + ':' + k, folded = grpFold.has(fk), h = el('h3', 'group grp-head' + (folded ? ' shut' : '')), items = groups.get(k), f = foldBtn(folded);
     f.setAttribute('aria-expanded', String(!folded));
     h.appendChild(f);
     const lab = el('span', 'grp-label');
@@ -260,6 +290,15 @@ function drawGroups(root, list, st, ix, opt) {
     root.appendChild(h);
     if (!folded) for (const b of items) root.appendChild(recLine(b, ix, opt(b)));
   }
+  return order.map((k) => view + ':' + (viewArg || '') + ':' + k);
+}
+// 分组状态下的全部收起 / 展开（不分组时没有可收的东西，不显示）
+function groupFoldBtn(keys) {
+  const allFolded = keys.every((k) => grpFold.has(k)), g = el('button', 'icon-btn foldall');
+  g.innerHTML = `${foldAllIcon(allFolded)}`;
+  tip(g, allFolded ? 'Expand all groups' : 'Collapse all groups', 'Z');
+  g.onclick = () => { for (const k of keys) if (allFolded) grpFold.delete(k); else grpFold.add(k); navIdx = null; drawView(); };
+  return g;
 }
 
 // ---- 设置 ----
@@ -279,6 +318,10 @@ function drawSettings(root) {
   const lab = el('label', 'set-label', 'Stale after (days)'); lab.htmlFor = 'stale';
   n.onchange = () => { cfg.stale = Math.max(1, Math.min(365, parseInt(n.value, 10) || 7)); saveCfg(); };
   row.append(lab, n); root.appendChild(row);
+  const qr = el('div', 'set-row'), qn = el('input'); qn.type = 'number'; qn.min = 1; qn.max = 365; qn.value = cfg.quiet; qn.id = 'quiet';
+  const ql = el('label', 'set-label', 'Quiet project after (days)'); ql.htmlFor = 'quiet';
+  qn.onchange = () => { cfg.quiet = Math.max(1, Math.min(365, parseInt(qn.value, 10) || 14)); saveCfg(); };
+  qr.append(ql, qn); root.appendChild(qr);
   const ws = el('div', 'set-row'), ch = el('button', 'btn', 'Change folder');
   ch.onclick = () => openWorkspace(() => FS.pick());
   ws.append(el('span', 'set-label', 'Workspace'), el('span', 'chip', FS.where), ch); root.appendChild(ws);
@@ -318,27 +361,30 @@ function drawViewBody() {
       }
     }
     if (view === 'archive' && ids.length) h1.appendChild(sortBtn('projOrder', false));
+    if (ids.length) h1.appendChild(foldAllBtn(ids, st));
     if (!ids.length) root.appendChild(empty(view === 'archive' ? 'No archived projects.' : 'No projects yet. Type [[ in the journal to create one.'));
     for (const id of ids) root.appendChild(drawProject(id, st, ix, true));
   } else if (view === 'working') {
     const cols = el('div', 'cols');
     h1.append(groupBtn('workGroup'), sortBtn('workOrder', false));
+    const keys = new Set();
     for (const s of ['TODO', 'WAIT']) {
       const list = st.open.filter((b) => b.status === s).sort(byStart(newest('workOrder', false))), col = el('section', 'col');
       const opt = (b) => { const age = Math.max(0, daysBetween(b.statusDate || b.date, t)); return { path: !cfg.workGroup, age, stale: age >= cfg.stale, short: true }; };
       col.appendChild(el('h2', null, `${s} (${list.length})`));
       if (!list.length) col.appendChild(empty('Nothing here.'));
-      else if (cfg.workGroup) drawGroups(col, list, st, ix, opt);
+      else if (cfg.workGroup) for (const k of drawGroups(col, list, st, ix, opt)) keys.add(k);
       else for (const b of list) col.appendChild(recLine(b, ix, opt(b)));
       cols.appendChild(col);
     }
     root.appendChild(cols);
+    if (keys.size) h1.appendChild(groupFoldBtn([...keys]));
   } else if (view === 'inbox') { h1.appendChild(sortBtn('inboxOrder', true)); listInto(root, st.inbox.slice().sort(newest('inboxOrder', true) ? byDateDesc : byDateAsc), ix, {}); }
   else if (view === 'tag') {
     const list = recordsByTag(S, viewArg).filter((b) => !b.del).sort(newest('tagOrder', true) ? byDateDesc : byDateAsc);
     h1.append(el('span', 'pj-count', `(${list.length})`), groupBtn('tagGroup'), sortBtn('tagOrder', true));
     if (!cfg.tagGroup || !list.length) return listInto(root, list, ix, { path: true });
-    drawGroups(root, list, st, ix, () => ({}));
+    h1.appendChild(groupFoldBtn(drawGroups(root, list, st, ix, () => ({}))));
   }
   else if (view === 'search') {
     const q = viewArg.toLowerCase(), hits = [];
@@ -378,9 +424,9 @@ function markCur() {   // 重画之后把焦点标回去
 }
 const KEYS = [
   ['Move', [['J  ↓', 'Next item'], ['K  ↑', 'Previous item'], ['Shift+J  Ctrl+J', 'Next project heading'], ['Shift+K  Ctrl+K', 'Previous project heading'], ['g g', 'First item'], ['Shift+G', 'Last item'], ['Shift+M', 'Middle of the visible screen']]],
-  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['P', 'Group by project (Working, tags)'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['D', 'Pick a date (journal)'], ['?', 'This help']]],
+  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['R', 'Show records that reference this one (↩)'], ['P', 'Group by project (Working, tags)'], ['H', 'Hide todo, wait and done records (project page)'], ['Z', 'Collapse or expand all projects or groups'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['D', 'Pick a date (journal)'], ['?', 'This help']]],
   ['Go to', NAV.map(([, label], i) => [`${i + 1}  Ctrl+Shift+${label[0]}`, label])],
-  ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['Alt+Shift+↑↓', 'Move block (journal)'], ['[[', 'Project menu (journal)'], ['@  #', 'Suggest existing names and tags'], ['/date', 'Insert a date from the calendar']]]
+  ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['Alt+Shift+↑↓', 'Move block (journal)'], ['[[', 'Project menu (journal)'], ['@  #', 'Suggest existing names and tags'], ['((', 'Reference another record'], ['/date', 'Insert a date from the calendar']]]
 ];
 function toggleHelp() {
   const d = $('#help');
@@ -399,7 +445,7 @@ function toggleHelp() {
 }
 let lastG = 0;   // gg：两次 g 的间隔在 600 ms 内才算
 function navKey(e) {
-  if (dp) return;   // 日期选择器开着时，键盘归它
+  if (dp || blp) return;   // 日期选择器或引用列表开着时，键盘归它
   if (openingWorkspace || $('#app').hidden || e.metaKey || e.altKey || e.isComposing) return;
   const L = e.code && e.code.startsWith('Key') ? e.code[3] : (e.key || '').length === 1 ? e.key.toUpperCase() : '';
   // 侧栏跳转：Ctrl+Shift+首字母，在任何地方都有效（包括编辑中）
@@ -457,6 +503,8 @@ function navKey(e) {
   if (L === 'D' && view === 'journal' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#title').click(); }
   if (L === 'F' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#nav-toggle').click(); }
   if (L === 'S' && view !== 'journal') { const g = $('#view .icon-btn.sort'); if (g) { e.preventDefault(); g.click(); } return; }
+  if (L === 'Z' && !e.ctrlKey && !e.shiftKey) { const g = $('#view .icon-btn.foldall'); if (g) { e.preventDefault(); g.click(); } return; }
+  if (L === 'H' && !e.ctrlKey && !e.shiftKey && view === 'project') { const g = $('#view .icon-btn.tasks'); if (g) { e.preventDefault(); g.click(); } return; }
   if (L === 'P' && !e.ctrlKey && !e.shiftKey && view !== 'journal') { const g = $('#view .icon-btn.grp'); if (g) { e.preventDefault(); g.click(); } return; }
   if (e.key === 'Escape') { if (cur) { navIdx = null; navCur = null; setCur(null); } return; }
   if (!cur || tag === 'BUTTON' && e.key === 'Enter') return;
@@ -465,6 +513,9 @@ function navKey(e) {
     if (view === 'journal') focusBlock(cur.parentNode.dataset.key);
     else if (cur.classList.contains('rec')) { if (cur.classList.contains('editable')) cur.click(); }
     else if (cur.classList.contains('foldable') || cur.classList.contains('grp-head')) cur.click();
+  } else if (L === 'R' && !e.ctrlKey && !e.shiftKey) {   // 打开引用了这条记录的记录列表
+    const b = cur.querySelector(':scope > .bl');
+    if (b) { e.preventDefault(); e.stopImmediatePropagation(); b.click(); }   // 同一次按键不再交给引用列表的处理，否则刚打开就被关上
   } else if (L === 'O' && view !== 'journal') {
     e.preventDefault();
     const b = cur.querySelector('.goto') || cur.querySelector('.pj-name');
@@ -585,3 +636,129 @@ window.addEventListener('keydown', (e) => {
   if (k === 'Escape') { e.preventDefault(); e.stopPropagation(); return closeTag(); }   // 只关菜单，不退出编辑
 }, true);
 document.addEventListener('focusout', (e) => { if (tagAc && tagAc.ta === e.target) closeTag(); });
+
+// ---- block 引用：输入 (( 自动补上 ))，在中间打字搜索全部记录，选中后插入 ((ID)) ----
+// 空格分隔的几个词都要出现，顺序不限、不区分大小写；最近的在前；排除正在编辑的这一条
+let refAc = null, refList = null;
+const shortDate = (d) => (d.slice(0, 4) === today().slice(0, 4) ? d.slice(5) : d);
+function closeRef() { if (!refAc) return; refAc = null; $('#rac').hidden = true; }
+function refCandidates() {   // 小写的正文缓存起来，数据没变就不重算
+  if (refList && refList.ver === S.ver) return refList.items;
+  const items = [];
+  eachBlock(S, (b) => { if (b.type === 'ord' && !b.del && hasContent(b)) items.push({ b, low: b.text.toLowerCase() }); });
+  items.sort((x, y) => (x.b.date < y.b.date ? 1 : x.b.date > y.b.date ? -1 : 0));
+  refList = { ver: S.ver, items };
+  return items;
+}
+function checkRef(ta, e, self) {
+  let p = ta.selectionStart, v = ta.value;
+  // 刚打出第二个 ( 时补上 ))，光标留在中间
+  if (e && e.inputType === 'insertText' && e.data === '(' && !e.isComposing && p === ta.selectionEnd && v.slice(p - 2, p) === '((' && v[p - 3] !== '(' && v.slice(p, p + 2) !== '))') {
+    ta.value = v = v.slice(0, p) + '))' + v.slice(p); ta.setSelectionRange(p, p);
+  }
+  const m = p === ta.selectionEnd && v.slice(0, p).match(/\(\(([^()\n]*)$/);
+  if (!m || new RegExp(`^${ID_RE}$`).test(m[1])) return closeRef();   // 已经是写好的引用
+  const terms = m[1].toLowerCase().split(/\s+/).filter(Boolean), hits = [];
+  for (const it of refCandidates()) {
+    if (it.b === self || (terms.length && !terms.every((w) => it.low.includes(w)))) continue;
+    hits.push(it.b);
+    if (hits.length === 8) break;
+  }
+  refAc = { ta, start: p - m[0].length, items: hits, sel: 0, terms, self };
+  drawRef();
+}
+function hl(text, terms) {   // 匹配到的词加粗
+  let html = esc(text);
+  for (const w of terms) html = html.replace(new RegExp(esc(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), (x) => `<b>${x}</b>`);
+  return html;
+}
+function drawRef() {
+  const { ta, items, sel, terms } = refAc;
+  if (!items.length) return drawMenu($('#rac'), ta, [{ title: terms.length ? 'No matching records' : 'No records yet', create: false }], -1, () => {}), $('#rac').classList.add('none');
+  $('#rac').classList.remove('none');
+  drawMenu($('#rac'), ta, items.map((b) => ({ lead: shortDate(b.date), html: hl(refText(b), terms), sub: refWhere(b), tip: `${b.date} · ${refWhere(b)}\n${b.text}` })), sel, (i) => { refAc.sel = i; applyRef(); });
+  const head = el('div', 'ac-head', terms.length ? 'Insert a reference' : 'Recent records'); $('#rac').prepend(head);
+}
+function applyRef() {
+  const { ta, start, items, sel } = refAc, b = items[sel];
+  closeRef();
+  if (!b) return;
+  if (!b.id) {   // 还没保存过的记录当场给它一个 ID（它所在的日期从页面里找，索引里的 page 可能还没更新）
+    const loc = find(S, b.key);
+    if (loc) { ensureIds(S, today(), loc.page); bump(S); touch(true, loc.page); }
+    if (!b.id) return toast('Could not reference that record');
+  }
+  const p = ta.selectionStart, v = ta.value, end = v.slice(p, p + 2) === '))' ? p + 2 : p, ins = `((${b.id}))`;
+  ta.value = v.slice(0, start) + ins + v.slice(end);
+  ta.setSelectionRange(start + ins.length, start + ins.length);
+  ta.dispatchEvent(new Event('input'));
+}
+window.addEventListener('keydown', (e) => {
+  const ta = e.target;
+  if (e.isComposing || !ta || ta.tagName !== 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (refAc && refAc.ta === ta) {
+    const k = e.key, n = refAc.items.length;
+    if ((k === 'ArrowDown' || k === 'ArrowUp') && n) { e.preventDefault(); e.stopPropagation(); refAc.sel = (refAc.sel + (k === 'ArrowDown' ? 1 : n - 1)) % n; return drawRef(); }
+    if ((k === 'Enter' || k === 'Tab') && !e.shiftKey && n) { e.preventDefault(); e.stopPropagation(); return applyRef(); }
+    if (k === 'Escape') { e.preventDefault(); e.stopPropagation(); return closeRef(); }   // 只关菜单，不退出编辑
+  }
+  const p = ta.selectionStart, v = ta.value;
+  if (p !== ta.selectionEnd) return;
+  // 在 ((…)) 里手敲 ) 时只是越过已有的 )；刚输入 (( 就退格时连同补上的 )) 一起删
+  if (e.key === ')' && v[p] === ')' && /\(\([^()\n]*\)?$/.test(v.slice(0, p))) { e.preventDefault(); e.stopPropagation(); ta.setSelectionRange(p + 1, p + 1); ta.dispatchEvent(new Event('input')); }
+  else if (e.key === 'Backspace' && v.slice(p - 2, p) === '((' && v.slice(p, p + 2) === '))') { e.preventDefault(); e.stopPropagation(); ta.value = v.slice(0, p - 1) + v.slice(p + 2); ta.setSelectionRange(p - 1, p - 1); ta.dispatchEvent(new Event('input')); }
+}, true);
+document.addEventListener('focusout', (e) => { if (refAc && refAc.ta === e.target) closeRef(); });
+
+// ---- 反向链接：被引用的记录行尾显示 "↩ N"，点开列出引用它的记录，点哪条跳到哪条 ----
+let blp = null;
+function closeBacklinks() { if (!blp) return; blp = null; $('#blp').hidden = true; }
+function backlinkBtn(b, list) {
+  const x = tip(el('button', 'bl', `↩ ${list.length}`), `Referenced by ${list.length} ${list.length === 1 ? 'record' : 'records'}`, 'R');
+  x.onmousedown = (e) => e.preventDefault();
+  x.onclick = (e) => { e.stopPropagation(); if (blp && blp.anchor === x) return closeBacklinks(); openBacklinks(x, b, list); };
+  return x;
+}
+function openBacklinks(anchor, b, list) {
+  const items = list.slice().sort((x, y) => (x.date < y.date ? 1 : -1));
+  blp = { anchor, items, sel: 0 };
+  drawBacklinks(b);
+}
+function drawBacklinks(b) {
+  const { anchor, items, sel } = blp, self = new RegExp(`\\(\\(${b.id}\\)\\)`, 'g');
+  drawMenu($('#blp'), anchor, items.map((r) => {
+    const own = r.text.split('\n')[0].replace(self, '').replace(/^[\s\-–—>→:：,，.。;；]+/, '').trim();   // 去掉对本条的引用和紧跟的连接符，只看对方自己写了什么
+    return { lead: shortDate(r.date), title: refText({ text: own || '…' }), sub: refWhere(r), tip: `${r.date} · ${refWhere(r)}` };
+  }), sel, (i) => { const r = blp.items[i]; closeBacklinks(); go(r.page, r.key); });
+  $('#blp').prepend(el('div', 'ac-head', 'Referenced by'));
+  const r = anchor.getBoundingClientRect(), box = $('#blp');   // 右对齐到按钮
+  box.style.left = Math.max(8, Math.min(r.right - box.offsetWidth, innerWidth - box.offsetWidth - 8)) + 'px';
+  blp.b = b;
+}
+window.addEventListener('keydown', (e) => {
+  if (!blp) return;
+  const k = e.key, n = blp.items.length;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (k === 'r' || k === 'R') { e.preventDefault(); e.stopPropagation(); return closeBacklinks(); }   // 再按一次 R 关闭
+  if (k === 'j' || k === 'J' || k === 'k' || k === 'K') { e.preventDefault(); e.stopPropagation(); blp.sel = (blp.sel + (/j/i.test(k) ? 1 : n - 1)) % n; return drawBacklinks(blp.b); }
+  if (k === 'ArrowDown' || k === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); blp.sel = (blp.sel + (k === 'ArrowDown' ? 1 : n - 1)) % n; return drawBacklinks(blp.b); }
+  if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); const r = blp.items[blp.sel]; closeBacklinks(); return go(r.page, r.key); }
+  if (k === 'Escape') { e.preventDefault(); e.stopPropagation(); return closeBacklinks(); }
+}, true);
+document.addEventListener('mousedown', (e) => { if (blp && !e.target.closest('#blp') && e.target !== blp.anchor) closeBacklinks(); }, true);
+
+// 退出编辑后，同一页上的引文和被引用记录行尾的 ↩ N 立刻更新，不必重画整页
+function refreshBacklinks() {
+  if (view !== 'journal') return;
+  const ix = index(S);
+  for (const node of document.querySelectorAll('#editor .block')) {
+    const row = node.firstElementChild, loc = find(S, node.dataset.key), b = loc && loc.b;
+    if (!row || !b || row.classList.contains('editing')) continue;
+    const view = row.querySelector('.view');
+    if (view && view.querySelector('.qref')) fillView(view, b, ix);   // 引文跟着原记录的最新文字走
+    const list = b.id && b.type === 'ord' && !b.del ? (ix.brefs.get(b.id) || []).filter((x) => !x.del) : [], old = row.querySelector(':scope > .bl');
+    if (!list.length) { if (old) old.remove(); continue; }
+    const btn = backlinkBtn(b, list);
+    if (old) old.replaceWith(btn); else row.insertBefore(btn, row.querySelector(':scope > .mini.del'));
+  }
+}

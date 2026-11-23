@@ -28,6 +28,7 @@ In the app, go to **Settings → Change folder** and select the `demo` folder. S
 - Click the Journal date or press `D` to jump to a day. Type `/date` while editing to insert a date.
 - Every line is a record. Enter adds one, Tab and Shift+Tab change the indent. A record belongs to whatever it is indented under.
 - Type `[[` to create or reference a project. Records indented under a project belong to it; top-level records go to the Inbox.
+- Type `((` and a few words to quote another record. The quote always shows the original's current text; click it to jump there. A record that is quoted shows `↩ N` at the end of its line.
 - Ctrl/Cmd+Enter cycles a record through none → TODO → WAIT → DONE.
 - Tag people with `@name` and categories with `#kind`. Write `@{Li Wei}` when a name contains a space. Typing `@` or `#` suggests names and tags you have already used. Click a tag to list every record that carries it.
 - Press `?` for the full list of keyboard shortcuts.
