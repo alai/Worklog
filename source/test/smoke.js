@@ -50,7 +50,8 @@
     { const st = stats(S, today()), want = st.tops.filter((id) => !st.N[id].life).length, navCount = (qa('.nav-item').find((x) => x.querySelector('.nav-label').textContent === 'Projects').querySelector('.count') || {}).textContent;
       const q0 = cfg.quiet; cfg.quiet = 1; drawView(); const qs = qa('.pj-head .quiet').map((x) => x.textContent + ' [' + x.title.replace(/\d{4}-\d\d-\d\d/, 'DATE') + ']');
       cfg.quiet = 365; drawView(); const none = qa('.pj-head .quiet').length; cfg.quiet = q0; drawView();
-      log.push('projects nav count=' + navCount + ' (open top-level=' + want + ') | quiet>=1: ' + qs.join(' ; ') + ' | quiet>=365: ' + none); }
+      { const t0 = cfg.theme, out = []; for (const th of ['light', 'dark']) { cfg.theme = th; applyTheme(); out.push(th + '=' + q('meta[name=theme-color]').content); } cfg.palette = 'solarized'; applyTheme(); out.push('solarized-dark=' + q('meta[name=theme-color]').content); cfg.palette = 'default'; cfg.theme = t0; applyTheme(); log.push('theme-color: ' + out.join(' ')); }
+    log.push('projects nav count=' + navCount + ' (open top-level=' + want + ') | quiet>=1: ' + qs.join(' ; ') + ' | quiet>=365: ' + none); }
     { const press = (k) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: 'Key' + k.toUpperCase(), bubbles: true, cancelable: true })); if (act().blur) act().blur(); const t0 = q('#view .icon-btn.foldall').title; press('z'); const f1 = qa('.pj.top').filter((x) => !x.querySelector('.pj-body')).length + '/' + qa('.pj.top').length, t1 = q('#view .icon-btn.foldall').title, sep = getComputedStyle(q('.pj.top')).borderBottomStyle;
       press('z'); const f2 = qa('.pj.top').filter((x) => !x.querySelector('.pj-body')).length; log.push('fold all: ' + t0 + ' -> Z folded=' + f1 + ' tip=' + t1 + ' separator=' + sep + ' | Z again folded=' + f2); }
     { const press = (k) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: 'Key' + k.toUpperCase(), bubbles: true, cancelable: true }));
@@ -162,10 +163,10 @@
     { // 项目页：H 隐藏 TODO / WAIT / DONE，只留事件；再按一次恢复，设置会记住
       const after = () => { const h = q('#view h2.rec-head'), out = []; for (let n = h && h.nextElementSibling; n; n = n.nextElementSibling) if (n.classList.contains('rec')) out.push(n); return out; };
       const h0 = q('#view h2.rec-head').textContent, all = after(), st0 = all.filter((r) => r.querySelector('.status')).length, tip0 = q('.rec-head .icon-btn.tasks').title;
-      press('h'); const h1 = q('#view h2.rec-head').textContent, left = after(), st1 = left.filter((r) => r.querySelector('.status')).length, pressed = q('.rec-head .icon-btn.tasks').getAttribute('aria-pressed'), saved = cfg.pageEvents;
+      press('h'); const hNoop = q('.rec-head .icon-btn.tasks').getAttribute('aria-pressed'); press('e'); const h1 = q('#view h2.rec-head').textContent, left = after(), st1 = left.filter((r) => r.querySelector('.status')).length, pressed = q('.rec-head .icon-btn.tasks').getAttribute('aria-pressed'), saved = cfg.pageEvents;
       const openKept = q('#view h2').textContent;
       q('.rec-head .icon-btn.tasks').click(); const h2 = q('#view h2.rec-head').textContent;
-      log.push('project hide tasks: "' + h0 + '" with status=' + st0 + ' tip=' + tip0 + ' | H -> "' + h1 + '" rows=' + left.length + '/' + all.length + ' with status=' + st1 + ' pressed=' + pressed + ' saved=' + saved + ' first h2 still "' + openKept + '" | click -> "' + h2 + '" saved=' + cfg.pageEvents);
+      log.push('project hide tasks: "' + h0 + '" with status=' + st0 + ' tip=' + tip0 + ' | E -> "' + h1 + '" rows=' + left.length + '/' + all.length + ' with status=' + st1 + ' pressed=' + pressed + ' (H on project page does nothing: pressed=' + hNoop + ') saved=' + saved + ' first h2 still "' + openKept + '" | click -> "' + h2 + '" saved=' + cfg.pageEvents);
     }
     nav('Working'); if (act().blur) act().blur(); press('/'); const foc = act().id; const setQ = async (x) => { q('#q').value = x; q('#q').dispatchEvent(new Event('input')); await sleep(220); };
     await setQ('gpu'); const s1 = view + ':' + q('#view h1').textContent; await setQ('g'); const s2 = q('#view h1').textContent; await setQ(''); const s3 = view;
@@ -347,6 +348,60 @@
         const before = order(), d1 = drag('mv-A', 'mv-B'), after1 = order(), d2 = drag('mv-B', 'mv-C', true), after2 = order(), grip = getComputedStyle(blk('mv-A').querySelector('.bullet')).cursor;
         log.push('drag dot: ' + before + ' -> drag mv-A onto mv-B -> ' + after1 + ' (line/dim ' + d1 + ') | Esc cancels -> ' + after2 + ' line hidden=' + q('#dropline').hidden + ' cursor=' + grip);
       }
+    }
+    // ---- Journal 折叠 ----
+    { const day = Object.keys(S.pages).sort().find((d) => S.pages[d].filter((b) => b.children.length).length >= 1 && S.pages[d].length >= 2);
+      await go(day); if (act().blur) act().blur();
+      const press = (k) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: 'Key' + k.toUpperCase(), bubbles: true, cancelable: true }));
+      const tops = S.pages[cur].filter((b) => b.children.length), kidsShown = () => qa('#editor > .list > .block > .kids').length;
+      const k0 = kidsShown(), btn = !q('#jfold').hidden, t0 = q('#jfold').title;
+      press('z'); const k1 = kidsShown(), more = qa('#editor .jmore').map((x) => x.textContent).join(' '), t1 = q('#jfold').title, ring = getComputedStyle(q('#editor .block.shut > .row .bullet')).boxShadow !== 'none';
+      press('z'); const k2 = kidsShown();
+      q('#editor .jchev').click(); const one = qa('#editor .block.shut').length;
+      const hidden = tops[0].children[0]; await go(day, hidden.key); const back = !jFold.has(tops[0].key) && !!q(`#editor .block[data-key="${hidden.key}"]`); if (act().blur) act().blur();
+      log.push('journal fold: button=' + btn + ' tip=' + t0 + ' | Z -> kids shown ' + k0 + '->' + k1 + ' of ' + tops.length + ' more=[' + more + '] tip=' + t1 + ' halo=' + ring + ' | Z -> ' + k2 + ' | chevron folds one=' + one + ' | jump into hidden child unfolds=' + back);
+      await go('2031-07-05'); log.push('journal fold: page without children shows button=' + !q('#jfold').hidden);
+    }
+    { // 代码段和引文混在一起时，每个代码段只渲染一次
+      await go('2031-07-06'); q('#add').click(); let ta = act(); ta.value = 'target with `inner code`'; ta.dispatchEvent(new Event('input')); ta.blur(); await sleep(60);
+      const tgt = S.pages[cur].find((b) => b.text === 'target with `inner code`'); ensureIds(S, today(), cur); bump(S);
+      q('#add').click(); ta = act(); ta.value = '`npm run build -- --watch --verbose` then ((' + tgt.id + ')) and `git push origin main --force-with-lease`'; ta.dispatchEvent(new Event('input')); ta.blur(); await sleep(60);
+      const v = qa('#editor .view').find((x) => x.textContent.startsWith('npm run')), codes = v ? [...v.querySelectorAll('code')].map((x) => x.textContent) : [];
+      log.push('inline code with quote: codes=' + JSON.stringify(codes) + ' quote="' + (v && v.querySelector('.qref') ? v.querySelector('.qref').textContent : '') + '"');
+    }
+    // ---- Working 一栏全宽 ----
+    { const kb = (k) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: 'Key' + k.toUpperCase(), bubbles: true, cancelable: true }));
+      const w0 = cfg.workOnly; cfg.workOnly = null; show('working'); if (act().blur) act().blur();
+      const st = () => (cfg.workOnly || 'both') + '[' + qa('#view .cols > *').map((x) => x.classList.contains('rail') ? 'rail:' + x.textContent : 'col:' + x.querySelector('.col-head').textContent).join(',') + ']';
+      const out = [st(), q('#view .col-head').title];
+      kb('t'); out.push('T ' + st() + ' tip=' + q('#view .col-head').title + ' rail tip=' + q('#view .rail').title);
+      kb('w'); out.push('W ' + st()); kb('w'); out.push('W ' + st());
+      kb('w'); q('#view .rail').click(); out.push('rail click ' + st()); q('#view .col-head').click(); out.push('head click ' + st());
+      kb('t'); const saved = JSON.parse(localStorage.getItem('worklog-cfg') || '{}').workOnly; cfg.workOnly = w0; saveCfg(); drawView();
+      log.push('working full width: ' + out.join(' | ') + ' | saved=' + saved);
+    }
+    // ---- 复制 Journal ----
+    { const got = []; navigator.clipboard.write = async (items) => { for (const it of items) got.push({ text: await (await it.getType('text/plain')).text(), html: await (await it.getType('text/html')).text() }); };
+      navigator.clipboard.writeText = async (t) => { got.push({ text: t }); };
+      const kb = (k, sh) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: 'KeyY', shiftKey: !!sh, bubbles: true, cancelable: true }));
+      await go('2031-07-06'); if (act().blur) act().blur(); navCur = null; setCur(null);
+      q('#copy').click(); await sleep(30); const t1 = q('#toast').textContent, c1 = got[got.length - 1];
+      kb('Y', true); await sleep(30); const t2 = q('#toast').textContent, c2 = got[got.length - 1];
+      log.push('copy as text: toast="' + t1 + '" btn=' + q('#copy').classList.contains('done') + ' text=' + JSON.stringify(c1.text) + ' html has <ul>=' + /<ul>/.test(c1.html) + ' <code>=' + /<code>/.test(c1.html));
+      log.push('copy for roam (Shift+Y): toast="' + t2 + '" text=' + JSON.stringify(c2.text) + ' help lists Shift+Y=' + /Shift\+Y/.test(q('#help').textContent));
+    }
+    // ---- 翻日快捷键 ----
+    { const kb = (key, o = {}) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key, code: o.code || (key.length === 1 ? 'Key' + key.toUpperCase() : key), shiftKey: !!o.shift, bubbles: true, cancelable: true }));
+      const days = Object.keys(S.pages).filter((d) => /^\d{4}-\d\d-\d\d$/.test(d) && S.pages[d].some(hasContent)).sort();
+      const mid = days[Math.floor(days.length / 2)]; await go(mid); if (act().blur) act().blur();
+      const out = [];
+      kb('l'); await sleep(30); out.push('L=' + cur); kb('h'); await sleep(30); out.push('H=' + cur); kb('ArrowRight'); await sleep(30); out.push('→=' + cur); kb('ArrowLeft'); await sleep(30); out.push('←=' + cur);
+      kb('L', { shift: true }); await sleep(30); out.push('Shift+L=' + cur + (cur === days[days.indexOf(mid) + 1] ? ' (next with records)' : ' WRONG'));
+      kb('H', { shift: true }); await sleep(30); out.push('Shift+H=' + cur);
+      await go(days[0]); q('#toast').textContent = ''; kb('H', { shift: true }); await sleep(30); out.push('first day Shift+H stays=' + (cur === days[0]) + ' toast="' + q('#toast').textContent + '"');
+      kb('t'); await sleep(30); out.push('T=' + (cur === today() ? 'today' : cur));
+      out.push('tips=' + ['#prev', '#next', '#today'].map((x) => q(x).title).join(' / '));
+      log.push('day keys: mid=' + mid + ' ' + out.join(' | '));
     }
     // ---- backups ----
     const bkMap = () => window.__subs.get('backups') || new Map(), bkNames = () => [...bkMap().keys()].sort();

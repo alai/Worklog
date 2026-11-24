@@ -17,7 +17,8 @@ function randomId() {
 function mk(props) {
   return Object.assign({
     key: 'b' + (++keySeq), id: null, type: 'ord', date: null, status: null, statusDate: null,
-    text: '', owner: null, proj: null, extParent: null, del: null, life: null, children: []
+    text: '', owner: null, proj: null, extParent: null, del: null, life: null, children: [],
+    page: null, own: null, _ix: null, _ixid: null   // 索引时填写；先占好位置，对象形状不变，几万条记录时访问更快
   }, props);
 }
 
@@ -37,7 +38,11 @@ function find(S, key) {
       search(list[i].children, list[i], page);
     }
   };
-  for (const d in S.pages) { if (hit) break; search(S.pages[d], null, d); }
+  // 先查记住的那一页：Journal 上的操作几乎都在当前页，不用每次把几千个文件翻一遍
+  const kp = S.kp || (S.kp = new Map()), p = kp.get(key);
+  if (p && S.pages[p]) search(S.pages[p], null, p);
+  for (const d in S.pages) { if (hit) break; if (d !== p) search(S.pages[d], null, d); }
+  if (hit) kp.set(key, hit.page);
   return hit;
 }
 
@@ -56,8 +61,8 @@ const CODE_RE = /`[^`\n]*`/g;
 function maskCode(t) { return t.indexOf('`') < 0 ? t : t.replace(CODE_RE, (x) => ' '.repeat(x.length)); }
 function outsideCode(t, fn, keep = (x) => x) {   // 只对代码段以外的部分做 fn，代码段交给 keep
   if (t.indexOf('`') < 0) return fn(t);
-  let out = '', i = 0, m; CODE_RE.lastIndex = 0;
-  while ((m = CODE_RE.exec(t))) { out += fn(t.slice(i, m.index)) + keep(m[0]); i = m.index + m[0].length; }
+  let out = '', i = 0;
+  for (const m of t.matchAll(CODE_RE)) { out += fn(t.slice(i, m.index)) + keep(m[0]); i = m.index + m[0].length; }   // matchAll 用自己的副本：fn 里再用 CODE_RE 也不会打乱这里的位置
   return out + fn(t.slice(i));
 }
 const inCode = (upto) => (upto.slice(upto.lastIndexOf('\n') + 1).split('`').length - 1) % 2 === 1;   // 光标前这一行有落单的反引号：正在代码里
@@ -77,30 +82,53 @@ function index(S) {
       else if (b.type === 'ord') {
         b.own = ctx;   // 推导出的归属，随索引一起刷新
         // 反向链接不依赖引用方有没有 ID：刚写下、还没保存的记录也要立刻算上
-        const tx = maskCode(b.text);
-        if (tx.indexOf('((') >= 0) {
-          const seen = new Set(); let r;
-          REC_RE.lastIndex = 0;
-          while ((r = REC_RE.exec(tx))) if (r[1] !== b.id && !seen.has(r[1])) { seen.add(r[1]); add(brefs, r[1], b); }
-        }
+        const x = scanText(b);
+        for (const r of x.recs) add(brefs, r, b);
         if (b.id) {
           add(byProj, ctx, b);
-          // 同一条记录里同一个标签或引用出现几次都只登记一次，否则标签页会把这条记录列出好几遍
-          let m; const seenTags = new Set(), seenRefs = new Set();
-          TAG_RE.lastIndex = 0;
-          while ((m = TAG_RE.exec(tx))) seenTags.add(m[1] + (m[2] || m[3]));
-          REF_RE.lastIndex = 0;
-          while ((m = REF_RE.exec(tx))) seenRefs.add(m[1] || m[2]);
-          if (b.extParent) seenRefs.add(b.extParent);
-          for (const t of seenTags) add(tags, t, b.id);
-          for (const r of seenRefs) add(refs, r, b.id);
+          for (const t of x.tags) add(tags, t, b.id);
+          for (const r of x.refs) add(refs, r, b.id);
         }
+        b._ix = b.text; b._ixid = b.id;   // 记下按哪段文字登记的（只存引用，不另建对象），只改文字时据此就地更新
       }
       go(b.children, childCtx(b, ctx), page);
     }
   };
   for (const d in S.pages) go(S.pages[d], 'INBOX', d);
   return (cache = { S, ver: S.ver, P, byId, tags, refs, byProj, brefs });
+}
+// 一条记录登记进索引的内容：标签、引用（项目和记录）、它引用了谁（反向链接用）
+// 同一条记录里同一个标签或引用出现几次都只登记一次，否则标签页会把这条记录列出好几遍
+const NONE = new Set();   // 共用的空集合，只读
+function scanText(b, t = b.text, id = b.id) {
+  if (!b.extParent && t.indexOf('@') < 0 && t.indexOf('#') < 0 && t.indexOf('((') < 0 && t.indexOf('[[') < 0) return { tags: NONE, refs: NONE, recs: NONE };   // 大多数记录什么都没有：不必建集合
+  const tx = maskCode(t), tags = new Set(), refs = new Set(), recs = new Set(); let m;
+  if (tx.indexOf('((') >= 0) { REC_RE.lastIndex = 0; while ((m = REC_RE.exec(tx))) if (m[1] !== id) recs.add(m[1]); }
+  if (id) {
+    TAG_RE.lastIndex = 0; while ((m = TAG_RE.exec(tx))) tags.add(m[1] + (m[2] || m[3]));
+    REF_RE.lastIndex = 0; while ((m = REF_RE.exec(tx))) refs.add(m[1] || m[2]);
+    if (b.extParent) refs.add(b.extParent);
+  }
+  return { tags, refs, recs };
+}
+// 只改了一条记录的文字（状态、类型、位置都没变）：就地更新索引，不整体重建。5 万条记录时整体重建要几十毫秒
+function retext(S, b) {
+  const fresh = cache.S === S && cache.ver === S.ver, sfresh = scache.S === S && scache.ver === S.ver;
+  S.ver++;
+  if (!fresh || b.type !== 'ord' || b._ix === null || b._ixid !== b.id) return;   // 期间补了 ID 等情况：交给下次整体重建
+  const o = scanText(b, b._ix, b._ixid), n = scanText(b);
+  const del = (map, k, v) => { const a = map.get(k); if (!a) return; const i = a.indexOf(v); if (i >= 0) a.splice(i, 1); if (!a.length) map.delete(k); };
+  const add = (map, k, v) => { let a = map.get(k); if (!a) map.set(k, a = []); if (!a.includes(v)) a.push(v); };
+  const sync = (map, before, after, v) => { for (const k of before) if (!after.has(k)) del(map, k, v); for (const k of after) if (!before.has(k)) add(map, k, v); };
+  sync(cache.brefs, o.recs, n.recs, b);
+  if (b.id) { sync(cache.tags, o.tags, n.tags, b.id); sync(cache.refs, o.refs, n.refs, b.id); }
+  b._ix = b.text; b._ixid = b.id; cache.ver = S.ver;
+  if (sfresh) scache.ver = S.ver;   // 统计只看状态、日期和归属，文字不影响
+}
+// 同一层里换顺序：索引和统计的内容都不变，只把版本号跟上
+function reorder(S) {
+  const fresh = cache.S === S && cache.ver === S.ver, sfresh = scache.S === S && scache.ver === S.ver;
+  S.ver++; if (fresh) cache.ver = S.ver; if (sfresh) scache.ver = S.ver;
 }
 function projects(S) { return index(S).P; }
 function recordsByTag(S, tag) { const ix = index(S); return (ix.tags.get(tag) || []).map((id) => ix.byId[id]); }
@@ -151,7 +179,8 @@ function commitBlock(S, b, today) {
     const pure = b.text.match(RE_PURE);
     if (pure && !b.status && projects(S)[pure[1]]) { b.type = 'head'; b.proj = pure[1]; b.text = ''; }
   }
-  if (before !== b.text + '|' + b.status + '|' + b.type) bump(S);
+  if (before === b.text + '|' + b.status + '|' + b.type) return;
+  if (before.slice(before.indexOf('|')) === '|' + b.status + '|' + b.type) retext(S, b); else bump(S);   // 只有文字变了就就地更新索引
 }
 
 // 给当前页补 ID 和状态日期；有了非标题的上层记录后不再保留跨文件父记录
@@ -362,7 +391,7 @@ function move(S, key, dir) {
   if (!loc || j < 0 || j >= loc.list.length) return false;
   loc.list.splice(loc.index, 1);
   loc.list.splice(j, 0, loc.b);
-  bump(S); return true;
+  reorder(S); return true;
 }
 
 function moveBefore(S, key, beforeKey) {   // 拖动用：放到同一层的 beforeKey 前面（null 为最后）
@@ -370,7 +399,7 @@ function moveBefore(S, key, beforeKey) {   // 拖动用：放到同一层的 bef
   const list = loc.list, j = beforeKey ? list.findIndex((x) => x.key === beforeKey) : list.length;
   if (j < 0 || beforeKey === key || list[loc.index + 1] && list[loc.index + 1].key === beforeKey || (!beforeKey && loc.index === list.length - 1)) return false;
   list.splice(loc.index, 1); list.splice(j > loc.index ? j - 1 : j, 0, loc.b);
-  bump(S); return true;
+  reorder(S); return true;
 }
 
 function newAfter(S, key) {
@@ -526,4 +555,4 @@ function setLife(S, id, today) {
   return { ok: true, page: b.page };
 }
 
-if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, moveBefore, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate, maskCode, outsideCode, inCode };
+if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, moveBefore, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate, maskCode, outsideCode, inCode, retext, reorder };

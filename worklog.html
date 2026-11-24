@@ -11,6 +11,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#ffffff">
 <title>Worklog</title>
 <style>
 /* 色板 = 一组变量，亮色、暗色各一段。新增色板：照下面 Solarized 的写法加两段 :root[data-palette=…][data-theme=light|dark]，再到 app.js 的 PALETTES 里登记名字 */
@@ -156,6 +157,17 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 .bullet{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none;margin-top:9px}
 .bullet.square{border-radius:2px;background:var(--ink)}
 .bullet.grip{position:relative;cursor:grab}
+.row{position:relative}
+.jchev{position:absolute;left:-14px;top:7px;width:16px;height:16px;padding:2px;border:0;border-radius:4px;background:none;color:var(--faint);cursor:pointer;opacity:0;transition:transform .12s}
+.jchev svg{width:12px;height:12px;display:block}
+.jchev:not(.shut){transform:rotate(90deg)}
+.row:hover>.jchev,.jchev.shut,.jchev:focus-visible{opacity:1}
+.jchev:hover{color:var(--ink);background:var(--soft)}
+.block.shut>.row .bullet{box-shadow:0 0 0 3px var(--line)}
+.jmore{border:0;background:none;padding:0 4px;margin-top:5px;border-radius:9px;font-size:11px;line-height:18px;color:var(--faint);cursor:pointer;flex:none}
+.jmore:hover{color:var(--ink);background:var(--soft)}
+header .icon-btn.foldall{margin-left:-6px}
+#copy.done{color:var(--accent)}
 .bullet.grip::after{content:'';position:absolute;inset:-8px -7px}
 .block.dragging{opacity:.4}
 body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
@@ -227,6 +239,7 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
 .rec-hidden{font-weight:400;color:var(--faint)}
 .empty{color:var(--faint);font-size:13px;margin:4px 0}
 .rec{position:relative;display:flex;align-items:baseline;gap:0 10px;padding:2px 32px 2px 6px;border-radius:6px;cursor:pointer}
+.rec{content-visibility:auto;contain-intrinsic-size:auto 28px}   /* 长列表里屏幕外的行先不排版：几百行的标签页、Working 页切换快一倍 */
 .rec:hover,.rec.cur,.row.cur,.pj-head.cur,.grp-head.cur{background:var(--soft)}
 .pj-head.cur .fold,.grp-head.cur .fold{background:var(--line);color:var(--ink)}
 .row.cur.editing,.rec.cur.editing{background:var(--edit)}
@@ -254,6 +267,15 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
 .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px}
 .col{min-width:0}
 .col h2{margin-top:0!important}
+.cols.only-todo{grid-template-columns:minmax(0,1fr) 30px}
+.cols.only-wait{grid-template-columns:30px minmax(0,1fr)}
+.col-head{all:unset;cursor:pointer;border-radius:5px;padding:1px 4px;margin:-1px -4px}
+.col-head:hover{background:var(--soft);color:var(--ink)}
+.col-head:focus-visible{outline:2px solid var(--accent)}
+.rail{display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 0;border:1px dashed var(--line2);border-radius:8px;background:none;color:var(--muted);cursor:pointer;font:inherit;font-size:11px;font-weight:600;letter-spacing:.06em;align-self:start;min-height:120px}
+.rail .rail-name{writing-mode:vertical-rl}
+.rail .rail-n{font-weight:400;color:var(--faint);letter-spacing:0}
+.rail:hover{background:var(--soft);color:var(--ink);border-style:solid}
 .pj.top{margin-bottom:18px}
 .pj-head{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;padding:2px 6px 2px 2px;border-radius:8px;min-height:30px}
 .pj-head.foldable{cursor:pointer}
@@ -373,7 +395,7 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
 .bk-row .mini.arm{border-color:var(--warn);color:var(--warn);background:var(--warn-bg)}
 #toast{position:fixed;left:50%;bottom:36px;transform:translateX(-50%);background:var(--ink);color:var(--on);padding:8px 16px;border-radius:8px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30;max-width:90vw}
 #toast.show{opacity:1}
-@media (max-width:900px){main{flex-direction:column}#side{flex:none;max-width:none;border-left:0;border-top:1px solid var(--line)}.cols{grid-template-columns:1fr}}
+@media (max-width:900px){main{flex-direction:column}#side{flex:none;max-width:none;border-left:0;border-top:1px solid var(--line)}.cols,.cols.only-todo,.cols.only-wait{grid-template-columns:1fr}.rail{flex-direction:row;justify-content:center;min-height:0;padding:6px 0}.rail .rail-name{writing-mode:horizontal-tb}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -400,8 +422,10 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
         <button class="btn sq" id="next" title="Next day" aria-label="Next day">›</button>
         <button class="btn" id="today" title="Go to today">Today</button>
         <h1 id="title" role="button" tabindex="0" title="Pick a date (D)" aria-haspopup="dialog"></h1>
-        <span class="chip" id="file"></span>
+        <button class="icon-btn foldall" id="jfold" hidden></button>
         <span class="grow"></span>
+        <span class="chip" id="file"></span>
+        <button class="icon-btn" id="copy" aria-label="Copy as text"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M13 4.5V4.5a1.5 1.5 0 0 0-1.5-1.5h-6A1.5 1.5 0 0 0 4 4.5v6A1.5 1.5 0 0 0 5.5 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
         <button class="btn" id="side-toggle" title="Show file source" aria-pressed="false">Source</button>
       </header>
       <main>
@@ -443,7 +467,8 @@ function randomId() {
 function mk(props) {
   return Object.assign({
     key: 'b' + (++keySeq), id: null, type: 'ord', date: null, status: null, statusDate: null,
-    text: '', owner: null, proj: null, extParent: null, del: null, life: null, children: []
+    text: '', owner: null, proj: null, extParent: null, del: null, life: null, children: [],
+    page: null, own: null, _ix: null, _ixid: null   // 索引时填写；先占好位置，对象形状不变，几万条记录时访问更快
   }, props);
 }
 
@@ -463,7 +488,11 @@ function find(S, key) {
       search(list[i].children, list[i], page);
     }
   };
-  for (const d in S.pages) { if (hit) break; search(S.pages[d], null, d); }
+  // 先查记住的那一页：Journal 上的操作几乎都在当前页，不用每次把几千个文件翻一遍
+  const kp = S.kp || (S.kp = new Map()), p = kp.get(key);
+  if (p && S.pages[p]) search(S.pages[p], null, p);
+  for (const d in S.pages) { if (hit) break; if (d !== p) search(S.pages[d], null, d); }
+  if (hit) kp.set(key, hit.page);
   return hit;
 }
 
@@ -482,8 +511,8 @@ const CODE_RE = /`[^`\n]*`/g;
 function maskCode(t) { return t.indexOf('`') < 0 ? t : t.replace(CODE_RE, (x) => ' '.repeat(x.length)); }
 function outsideCode(t, fn, keep = (x) => x) {   // 只对代码段以外的部分做 fn，代码段交给 keep
   if (t.indexOf('`') < 0) return fn(t);
-  let out = '', i = 0, m; CODE_RE.lastIndex = 0;
-  while ((m = CODE_RE.exec(t))) { out += fn(t.slice(i, m.index)) + keep(m[0]); i = m.index + m[0].length; }
+  let out = '', i = 0;
+  for (const m of t.matchAll(CODE_RE)) { out += fn(t.slice(i, m.index)) + keep(m[0]); i = m.index + m[0].length; }   // matchAll 用自己的副本：fn 里再用 CODE_RE 也不会打乱这里的位置
   return out + fn(t.slice(i));
 }
 const inCode = (upto) => (upto.slice(upto.lastIndexOf('\n') + 1).split('`').length - 1) % 2 === 1;   // 光标前这一行有落单的反引号：正在代码里
@@ -503,30 +532,53 @@ function index(S) {
       else if (b.type === 'ord') {
         b.own = ctx;   // 推导出的归属，随索引一起刷新
         // 反向链接不依赖引用方有没有 ID：刚写下、还没保存的记录也要立刻算上
-        const tx = maskCode(b.text);
-        if (tx.indexOf('((') >= 0) {
-          const seen = new Set(); let r;
-          REC_RE.lastIndex = 0;
-          while ((r = REC_RE.exec(tx))) if (r[1] !== b.id && !seen.has(r[1])) { seen.add(r[1]); add(brefs, r[1], b); }
-        }
+        const x = scanText(b);
+        for (const r of x.recs) add(brefs, r, b);
         if (b.id) {
           add(byProj, ctx, b);
-          // 同一条记录里同一个标签或引用出现几次都只登记一次，否则标签页会把这条记录列出好几遍
-          let m; const seenTags = new Set(), seenRefs = new Set();
-          TAG_RE.lastIndex = 0;
-          while ((m = TAG_RE.exec(tx))) seenTags.add(m[1] + (m[2] || m[3]));
-          REF_RE.lastIndex = 0;
-          while ((m = REF_RE.exec(tx))) seenRefs.add(m[1] || m[2]);
-          if (b.extParent) seenRefs.add(b.extParent);
-          for (const t of seenTags) add(tags, t, b.id);
-          for (const r of seenRefs) add(refs, r, b.id);
+          for (const t of x.tags) add(tags, t, b.id);
+          for (const r of x.refs) add(refs, r, b.id);
         }
+        b._ix = b.text; b._ixid = b.id;   // 记下按哪段文字登记的（只存引用，不另建对象），只改文字时据此就地更新
       }
       go(b.children, childCtx(b, ctx), page);
     }
   };
   for (const d in S.pages) go(S.pages[d], 'INBOX', d);
   return (cache = { S, ver: S.ver, P, byId, tags, refs, byProj, brefs });
+}
+// 一条记录登记进索引的内容：标签、引用（项目和记录）、它引用了谁（反向链接用）
+// 同一条记录里同一个标签或引用出现几次都只登记一次，否则标签页会把这条记录列出好几遍
+const NONE = new Set();   // 共用的空集合，只读
+function scanText(b, t = b.text, id = b.id) {
+  if (!b.extParent && t.indexOf('@') < 0 && t.indexOf('#') < 0 && t.indexOf('((') < 0 && t.indexOf('[[') < 0) return { tags: NONE, refs: NONE, recs: NONE };   // 大多数记录什么都没有：不必建集合
+  const tx = maskCode(t), tags = new Set(), refs = new Set(), recs = new Set(); let m;
+  if (tx.indexOf('((') >= 0) { REC_RE.lastIndex = 0; while ((m = REC_RE.exec(tx))) if (m[1] !== id) recs.add(m[1]); }
+  if (id) {
+    TAG_RE.lastIndex = 0; while ((m = TAG_RE.exec(tx))) tags.add(m[1] + (m[2] || m[3]));
+    REF_RE.lastIndex = 0; while ((m = REF_RE.exec(tx))) refs.add(m[1] || m[2]);
+    if (b.extParent) refs.add(b.extParent);
+  }
+  return { tags, refs, recs };
+}
+// 只改了一条记录的文字（状态、类型、位置都没变）：就地更新索引，不整体重建。5 万条记录时整体重建要几十毫秒
+function retext(S, b) {
+  const fresh = cache.S === S && cache.ver === S.ver, sfresh = scache.S === S && scache.ver === S.ver;
+  S.ver++;
+  if (!fresh || b.type !== 'ord' || b._ix === null || b._ixid !== b.id) return;   // 期间补了 ID 等情况：交给下次整体重建
+  const o = scanText(b, b._ix, b._ixid), n = scanText(b);
+  const del = (map, k, v) => { const a = map.get(k); if (!a) return; const i = a.indexOf(v); if (i >= 0) a.splice(i, 1); if (!a.length) map.delete(k); };
+  const add = (map, k, v) => { let a = map.get(k); if (!a) map.set(k, a = []); if (!a.includes(v)) a.push(v); };
+  const sync = (map, before, after, v) => { for (const k of before) if (!after.has(k)) del(map, k, v); for (const k of after) if (!before.has(k)) add(map, k, v); };
+  sync(cache.brefs, o.recs, n.recs, b);
+  if (b.id) { sync(cache.tags, o.tags, n.tags, b.id); sync(cache.refs, o.refs, n.refs, b.id); }
+  b._ix = b.text; b._ixid = b.id; cache.ver = S.ver;
+  if (sfresh) scache.ver = S.ver;   // 统计只看状态、日期和归属，文字不影响
+}
+// 同一层里换顺序：索引和统计的内容都不变，只把版本号跟上
+function reorder(S) {
+  const fresh = cache.S === S && cache.ver === S.ver, sfresh = scache.S === S && scache.ver === S.ver;
+  S.ver++; if (fresh) cache.ver = S.ver; if (sfresh) scache.ver = S.ver;
 }
 function projects(S) { return index(S).P; }
 function recordsByTag(S, tag) { const ix = index(S); return (ix.tags.get(tag) || []).map((id) => ix.byId[id]); }
@@ -577,7 +629,8 @@ function commitBlock(S, b, today) {
     const pure = b.text.match(RE_PURE);
     if (pure && !b.status && projects(S)[pure[1]]) { b.type = 'head'; b.proj = pure[1]; b.text = ''; }
   }
-  if (before !== b.text + '|' + b.status + '|' + b.type) bump(S);
+  if (before === b.text + '|' + b.status + '|' + b.type) return;
+  if (before.slice(before.indexOf('|')) === '|' + b.status + '|' + b.type) retext(S, b); else bump(S);   // 只有文字变了就就地更新索引
 }
 
 // 给当前页补 ID 和状态日期；有了非标题的上层记录后不再保留跨文件父记录
@@ -788,7 +841,7 @@ function move(S, key, dir) {
   if (!loc || j < 0 || j >= loc.list.length) return false;
   loc.list.splice(loc.index, 1);
   loc.list.splice(j, 0, loc.b);
-  bump(S); return true;
+  reorder(S); return true;
 }
 
 function moveBefore(S, key, beforeKey) {   // 拖动用：放到同一层的 beforeKey 前面（null 为最后）
@@ -796,7 +849,7 @@ function moveBefore(S, key, beforeKey) {   // 拖动用：放到同一层的 bef
   const list = loc.list, j = beforeKey ? list.findIndex((x) => x.key === beforeKey) : list.length;
   if (j < 0 || beforeKey === key || list[loc.index + 1] && list[loc.index + 1].key === beforeKey || (!beforeKey && loc.index === list.length - 1)) return false;
   list.splice(loc.index, 1); list.splice(j > loc.index ? j - 1 : j, 0, loc.b);
-  bump(S); return true;
+  reorder(S); return true;
 }
 
 function newAfter(S, key) {
@@ -952,7 +1005,7 @@ function setLife(S, id, today) {
   return { ok: true, page: b.page };
 }
 
-if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, moveBefore, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate, maskCode, outsideCode, inCode };
+if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, moveBefore, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate, maskCode, outsideCode, inCode, retext, reorder };
 
 // 本地目录读写层：File System Access API。window.__mockDir 存在时用它代替真实目录（测试用）。
 const FS = {
@@ -1049,7 +1102,7 @@ const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 let S = newState(), cur = today(), readOnly = false, rendering = false, ac = null, origin = null;
 let showSide = false, prevLines = new Set(), view = 'journal', viewArg = null;
-const APP_VERSION = '0.37';
+const APP_VERSION = '0.39';
 // 外观由三项组合：THEMES 选亮暗（System 跟随系统），PALETTES 选色板，cfg.color 选着色强度（Full/Soft/Mono）。
 // 登记在这里的名字会自动出现在 Settings；对应的变量写在 style.css
 const THEMES = { light: 'Light', dark: 'Dark' };
@@ -1058,7 +1111,8 @@ const cfg = { chip: 'date', theme: 'system', nav: 'wide', stale: 7, quiet: 14, f
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('worklog-cfg') || '{}')); } catch (e) { /* 忽略 */ }
 function saveCfg() { try { localStorage.setItem('worklog-cfg', JSON.stringify(cfg)); } catch (e) { /* 忽略 */ } applyTheme(); }
 const darkMq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
-function applyTheme() { const r = document.documentElement; if (PALETTES[cfg.palette] && cfg.palette !== 'default') r.dataset.palette = cfg.palette; else delete r.dataset.palette; r.dataset.color = cfg.color; document.documentElement.dataset.theme = THEMES[cfg.theme] ? cfg.theme : (darkMq && darkMq.matches ? 'dark' : 'light'); }
+function applyTheme() { const r = document.documentElement; if (PALETTES[cfg.palette] && cfg.palette !== 'default') r.dataset.palette = cfg.palette; else delete r.dataset.palette; r.dataset.color = cfg.color; document.documentElement.dataset.theme = THEMES[cfg.theme] ? cfg.theme : (darkMq && darkMq.matches ? 'dark' : 'light');
+  const m = document.querySelector('meta[name=theme-color]'), bg = getComputedStyle(r).getPropertyValue('--bg').trim(); if (m && bg) m.content = bg; }   // 给浏览器的顶栏颜色建议：桌面 Chrome 只在安装成应用时采用
 if (darkMq) darkMq.addEventListener('change', applyTheme);
 applyTheme();
 const dirty = new Set(), force = new Set();
@@ -1139,6 +1193,62 @@ function richPart(line, P, byId) {
   }
   return out + esc(line.slice(i));
 }
+// ---- 复制 Journal：文本（附带一份 HTML 给邮件）或 Roam 格式 ----
+const ROAM_MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function roamDate(d) { const [y, m, n] = d.split('-').map(Number), th = n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'; return `[[${ROAM_MONTH[m - 1]} ${n}${th}, ${y}]]`; }
+function exportLine(line, roam, ix) {   // 一行正文换成目标格式；代码段原样保留
+  return outsideCode(line, (t) => t.replace(TOKEN, (all, esc1, pjName, pj, rec, person, kind) => {
+    if (esc1) return esc1.slice(1);
+    if (pj) { const path = ix.P[pj] ? projectPath(ix.P, pj) : pjName; return roam ? `[[${path.split(' / ').join('/')}]]` : path; }
+    if (rec) return ix.byId[rec] ? '“' + refText(ix.byId[rec]) + '”' : '“unknown record”';
+    if (person) { const n = person.slice(1).replace(/[{}]/g, ''); return roam ? `[[${n}]]` : '@' + n; }
+    const n = kind.slice(1).replace(/[{}]/g, ''); return roam ? (/\s/.test(n) ? `#[[${n}]]` : '#' + n) : '#' + n;
+  }).replace(/\[\[(\d{4}-\d{2}-\d{2})\]\]/g, (all, d) => (roam ? roamDate(d) : d)));
+}
+function exportJournal(roam) {
+  const ix = index(S), sel = navCur && find(S, navCur), list = sel ? [sel.b] : S.pages[cur] || [];
+  let n = 0, hidden = 0; const txt = [], html = [];
+  const hiddenCount = (bs) => bs.reduce((k, b) => k + (b.del || b.type === 'raw' || (b.type === 'ord' && !hasContent(b)) ? 0 : 1) + hiddenCount(b.children), 0);
+  const walk = (bs, depth) => {
+    const items = [];
+    for (const b of bs) {
+      if (b.del || b.type === 'raw' || (b.type === 'ord' && !hasContent(b))) continue;
+      n++;
+      let first, rest = [], strong = false;
+      if (b.type === 'head') { const path = ix.P[b.proj] ? projectPath(ix.P, b.proj) : (b.label || 'unknown project'); first = roam ? `[[${path.split(' / ').join('/')}]]` : path; strong = true; }
+      else if (b.type === 'proj' || b.type === 'branch') { const path = b.id && ix.P[b.id] ? projectPath(ix.P, b.id) : b.text; first = (roam ? `[[${path.split(' / ').join('/')}]]` : path) + (b.type === 'proj' ? ' (new project)' : ' (new branch)'); strong = true; }
+      else {
+        const lines = b.text.split('\n').map((l) => exportLine(l, roam, ix));
+        first = lines[0]; rest = lines.slice(1);
+        if (b.status) first = (roam ? (b.status === 'DONE' ? '{{[[DONE]]}} ' : b.status === 'WAIT' ? '{{[[TODO]]}} #WAIT ' : '{{[[TODO]]}} ') : `[${b.status}${b.status === 'WAIT' && b.statusDate ? ' since ' + b.statusDate.slice(5) : ''}] `) + first;
+      }
+      const pad = roam ? '    '.repeat(depth) : '  '.repeat(depth);
+      txt.push(roam ? `${pad}- ${first}` : `${pad}${strong ? '■' : '•'} ${first}`);
+      for (const r of rest) txt.push(roam ? `${pad}    ${r}` : `${pad}  ${r}`);   // 续行跟在同一条下面
+      let kids = '';
+      if (b.children.length) { if (jFold.has(b.key)) hidden += hiddenCount(b.children); else kids = walk(b.children, depth + 1); }
+      const body = [first, ...rest].map(esc).join('<br>').replace(/`([^`\n]*)`/g, '<code>$1</code>');
+      items.push(`<li>${strong ? `<b>${body}</b>` : body}${kids}</li>`);
+    }
+    return items.length ? `<ul>${items.join('')}</ul>` : '';
+  };
+  const ul = walk(list, 0);
+  if (!n) return { n: 0 };
+  const [y, m, d] = cur.split('-').map(Number), title = `${cur} ${WEEK[new Date(y, m - 1, d).getDay()]}`;
+  const text = roam ? txt.join('\n') : `${title}\n\n${txt.join('\n')}`;
+  return { n, hidden, text, html: `<p><b>${esc(title)}</b></p>${ul}`, sel: !!sel };
+}
+async function copyJournal(roam) {
+  const r = exportJournal(roam);
+  if (!r.n) return toast('Nothing to copy on this page');
+  try {
+    if (!roam && window.ClipboardItem) await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([r.text], { type: 'text/plain' }), 'text/html': new Blob([r.html], { type: 'text/html' }) })]);
+    else await navigator.clipboard.writeText(r.text);
+  } catch (e) { return toast('Could not copy: ' + e.message); }
+  const btn = $('#copy'); btn.classList.add('done'); clearTimeout(btn._t); btn._t = setTimeout(() => btn.classList.remove('done'), 1500);
+  toast(`${roam ? 'Copied for Roam' : 'Copied as text'} · ${r.n} ${r.n === 1 ? 'record' : 'records'}${r.sel ? ' (selected block)' : ''}${r.hidden ? ` · ${r.hidden} folded left out` : ''}`);
+  return r;
+}
 // ---- block 引用 ----
 // 被引用记录第一行的纯文字：项目引用换成项目名、花括号去掉；它里面再引用别的记录时只展开一层
 function refText(b, depth = 0) {
@@ -1173,9 +1283,32 @@ function lockedBlock(b, st) {
   const id = b.type === 'ord' ? b.own : b.type === 'head' ? b.proj : b.id;
   return !!(id && st.N[id] && st.N[id].closed);
 }
+// Journal 的折叠：只记在内存里（块的 key 每次打开都会重新生成）
+const jFold = new Set();
+const countAll = (list) => list.reduce((n, b) => n + 1 + countAll(b.children), 0);
+function unfoldTo(key, list = S.pages[cur] || []) {   // 要聚焦的块如果藏在折叠里，把一路的上级都打开
+  for (const b of list) { if (b.key === key || unfoldTo(key, b.children)) { if (b.key !== key) jFold.delete(b.key); return true; } }
+  return false;
+}
+function jFoldBtn() {
+  const g = $('#jfold'), tops = (S.pages[cur] || []).filter((b) => b.children.length), all = tops.length && tops.every((b) => jFold.has(b.key));
+  g.hidden = !tops.length; if (!tops.length) return;
+  g.innerHTML = foldAllIcon(all); tip(g, all ? 'Expand all' : 'Collapse all', 'Z');
+  g.onclick = () => {
+    if (all) for (const b of tops) jFold.delete(b.key);
+    else { for (const b of tops) jFold.add(b.key); const top = navCur && tops.find((b) => b.key === navCur || find(S, navCur) && unfoldPath(b, navCur)); if (top) navCur = top.key; }
+    render();
+  };
+}
+const unfoldPath = (b, key) => b.children.some((c) => c.key === key || unfoldPath(c, key));   // key 是否在 b 下面
+function toggleFold(b) {
+  if (jFold.has(b.key)) jFold.delete(b.key); else { jFold.add(b.key); if (navCur && unfoldPath(b, navCur)) navCur = b.key; }
+  render();
+}
 function render(focusKey, pos) {
   if (view !== 'journal') return;
   rendering = true; closeAc(); ensurePage();
+  if (focusKey) unfoldTo(focusKey);
   const [y, m, d] = cur.split('-').map(Number);
   $('#title').textContent = `${cur} ${WEEK[new Date(y, m - 1, d).getDay()]}`;
   const ix = index(S), root = $('#editor');
@@ -1186,7 +1319,8 @@ function render(focusKey, pos) {
     for (const b of list) {
       const node = el('div', 'block'); node.dataset.key = b.key;
       node.appendChild(drawRow(b, parent, ix));
-      if (b.children.length) node.appendChild(draw(b.children, b));
+      if (b.children.length && jFold.has(b.key)) node.classList.add('shut');
+      else if (b.children.length) node.appendChild(draw(b.children, b));
       wrap.appendChild(node);
     }
     return wrap;
@@ -1194,7 +1328,7 @@ function render(focusKey, pos) {
   root.appendChild(draw(S.pages[cur], null));
   rendering = false;
   if (showSide) updateSide();
-  markCur();
+  jFoldBtn(); markCur();
   if (focusKey) focusBlock(focusKey, pos);
 }
 
@@ -1212,6 +1346,14 @@ function drawRow(b, parent, ix) {
   const bul = el('span', 'bullet' + (b.type === 'head' ? ' ring' : b.type === 'proj' || b.type === 'branch' ? ' square' : ''));
   row.appendChild(bul);
   if (!locked && !b.del) dragBullet(bul, b);
+  if (b.children.length) {   // 有子项的块可以折叠：箭头平时悬停才出现，折叠后一直显示
+    const shut = jFold.has(b.key), n = countAll(b.children), c = el('button', 'jchev' + (shut ? ' shut' : ''));
+    c.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2.5L7.5 6 4 9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    c.setAttribute('aria-expanded', String(!shut)); tip(c, shut ? `Expand (${n} inside)` : 'Collapse');
+    c.onmousedown = (e) => e.preventDefault(); c.onclick = (e) => { e.stopPropagation(); toggleFold(b); };
+    row.appendChild(c);
+    if (shut) { const m = el('button', 'jmore', `+${n}`); tip(m, `${n} hidden · click to expand`); m.onmousedown = (e) => e.preventDefault(); m.onclick = (e) => { e.stopPropagation(); toggleFold(b); }; row._more = m; }
+  }
   if (b.type === 'ord' && b.status) {
     const st = el('button', 'status ' + b.status, chipLabel(b));
     st.title = `Edit status · ${b.status} since ${b.statusDate}`;
@@ -1236,6 +1378,7 @@ function drawRow(b, parent, ix) {
     body.appendChild(ta);
   }
   row.appendChild(body);
+  if (row._more) row.appendChild(row._more);
 
   if (b.type === 'proj') bul.title = `Project, created ${b.date}`;
   if (b.type === 'head') bul.title = 'Project heading';
@@ -1294,7 +1437,7 @@ function onBlur(e, b, row, parent) {
   closeAc(); origin = null;
   const v = S.ver, ta = e.target;
   // 只改了文字时 commitBlock 不一定让索引失效；这里补上，标签页、补全候选、反向链接才会立刻更新，也会立即保存
-  if (!readOnly && ta && ta._t0 !== undefined && ta._t0 !== ta.value) { ta._t0 = ta.value; bump(S); }
+  if (!readOnly && ta && ta._t0 !== undefined && ta._t0 !== ta.value) { ta._t0 = ta.value; retext(S, b); }
   if (!readOnly) commitBlock(S, b, today());
   const ix = index(S);
   if (e.relatedTarget && row.contains(e.relatedTarget)) { row.classList.remove('editing'); fillView(row.querySelector('.view'), b, ix); if (b.type === 'ord') row.querySelector('textarea').value = b.text; }
@@ -1372,6 +1515,12 @@ function onKey(e, b, ta) {
   if (dir) { e.preventDefault(); if (moveBlock(b.key, dir)) render(b.key, pos); return; }
 }
 // 上下移动记录：Alt+Shift+↑↓ 或 Alt+Shift+J/K（按物理键判断，Mac 上 Option 会把 J/K 变成别的字符）
+function stepDay(n) { go(shiftDay(cur, n)); }
+function jumpDay(dir) {   // 跳到前 / 后一个有记录的日子，中间的空白日期跳过
+  const days = Object.keys(S.pages).filter((d) => validDate(d) && (dir < 0 ? d < cur : d > cur) && S.pages[d].some(hasContent)).sort();
+  const d = dir < 0 ? days[days.length - 1] : days[0];
+  if (d) go(d); else toast(dir < 0 ? 'No earlier days with records' : 'No later days with records');
+}
 function moveDir(e) {
   if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey || e.isComposing) return 0;
   return e.key === 'ArrowUp' || e.code === 'KeyK' ? -1 : e.key === 'ArrowDown' || e.code === 'KeyJ' ? 1 : 0;
@@ -1636,9 +1785,11 @@ async function start() {
 }
 
 async function boot() {
-  $('#prev').onclick = () => go(shiftDay(cur, -1));
-  $('#next').onclick = () => go(shiftDay(cur, 1));
+  $('#prev').onclick = () => stepDay(-1);
+  $('#next').onclick = () => stepDay(1);
   $('#today').onclick = () => go(today());
+  $('#copy').onclick = () => copyJournal(false); tip($('#copy'), 'Copy as text', 'Y');
+  tip($('#prev'), 'Previous day', 'H'); tip($('#next'), 'Next day', 'L'); tip($('#today'), 'Go to today', 'T');
   $('#add').onclick = () => { if (readOnly) return; const nb = mk({ date: cur }); S.pages[cur].push(nb); render(nb.key, 0); };
   $('#side-toggle').onclick = () => { showSide = !showSide; $('#side').hidden = !showSide; $('#side-toggle').setAttribute('aria-pressed', String(showSide)); if (showSide) { prevLines = new Set(); updateSide(); } };
   $('#nav-toggle').onclick = () => { cfg.nav = cfg.nav === 'narrow' ? 'wide' : 'narrow'; saveCfg(); drawNav(); };
@@ -1772,7 +1923,7 @@ function editRec(r, t, b, o) {
     if (!r.isConnected) return;
     origin = null;
     if (!ta.value.trim()) { b.text = before; toast('Empty text ignored. Delete records in the journal.'); }
-    else { b.text = ta.value; commitBlock(S, b, today()); if (b.text !== before) bump(S); }   // 只改了文字也要保存：以前这里漏掉了，改动只留在内存里
+    else { b.text = ta.value; commitBlock(S, b, today()); if (b.text !== before) retext(S, b); }   // 只改了文字也要保存：以前这里漏掉了，改动只留在内存里
     const opt = { ...o, noStatus: false, stale: false };
     if (o.age != null && b.statusDate) { opt.age = Math.max(0, daysBetween(b.statusDate, today())); opt.stale = (b.status === 'TODO' || b.status === 'WAIT') && opt.age >= cfg.stale; }
     const fresh = recLine(b, index(S), opt);
@@ -1928,7 +2079,7 @@ function drawProjectPage(root, id, st, ix) {
   if (recs.length) h2.appendChild(taskBtn(hide));
   root.appendChild(h2);
   if (!recs.length) return root.appendChild(empty('No records yet.'));
-  if (!shown.length) return root.appendChild(empty('Only tasks here. Press H to show them.'));
+  if (!shown.length) return root.appendChild(empty('Only tasks here. Press E to show them.'));
   shown.sort(pageNew ? byDateDesc : byDateAsc);
   let day = null;
   for (const b of shown.slice(0, 400)) { if (b.date !== day) root.appendChild(el('div', 'day', day = b.date)); const r = recLine(b, ix, { path: b.own !== id }); r.firstChild.remove(); root.appendChild(r); }
@@ -1937,7 +2088,7 @@ function drawProjectPage(root, id, st, ix) {
 function taskBtn(hide) {
   const g = el('button', 'icon-btn tasks');
   g.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3.5" width="4" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.6 5.6l.9.9 1.6-1.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 5.5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M2.5 13.5h15M2.5 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/></svg>';
-  tip(g, hide ? 'Show todo, wait and done records' : 'Hide todo, wait and done records', 'H'); g.setAttribute('aria-pressed', String(hide));
+  tip(g, hide ? 'Show todo, wait and done records' : 'Hide todo, wait and done records', 'E'); g.setAttribute('aria-pressed', String(hide));
   g.onclick = () => { cfg.pageEvents = !hide; saveCfg(); drawView(); };
   return g;
 }
@@ -1979,6 +2130,7 @@ function drawGroups(root, list, st, ix, opt) {
   return order.map((k) => view + ':' + (viewArg || '') + ':' + k);
 }
 // 分组状态下的全部收起 / 展开（不分组时没有可收的东西，不显示）
+function workOnly(s) { cfg.workOnly = cfg.workOnly === s ? null : s; saveCfg(); navIdx = null; drawView(); }
 function groupFoldBtn(keys) {
   const allFolded = keys.every((k) => grpFold.has(k)), g = el('button', 'icon-btn foldall');
   g.innerHTML = `${foldAllIcon(allFolded)}`;
@@ -2051,13 +2203,22 @@ function drawViewBody() {
     if (!ids.length) root.appendChild(empty(view === 'archive' ? 'No archived projects.' : 'No projects yet. Type [[ in the journal to create one.'));
     for (const id of ids) root.appendChild(drawProject(id, st, ix, true));
   } else if (view === 'working') {
-    const cols = el('div', 'cols');
+    // 一栏全宽：另一栏收成一条窄竖条，留在原来的位置，写着名字和条数，点它就切过去
+    const only = cfg.workOnly === 'TODO' || cfg.workOnly === 'WAIT' ? cfg.workOnly : null, cols = el('div', 'cols' + (only ? ' only-' + only.toLowerCase() : ''));
     h1.append(groupBtn('workGroup'), sortBtn('workOrder', false));
     const keys = new Set();
     for (const s of ['TODO', 'WAIT']) {
-      const list = st.open.filter((b) => b.status === s).sort(byStart(newest('workOrder', false))), col = el('section', 'col');
+      const list = st.open.filter((b) => b.status === s).sort(byStart(newest('workOrder', false))), key = s[0], name = s === 'TODO' ? 'TODO' : 'WAIT';
+      if (only && only !== s) {
+        const rail = el('button', 'rail'); rail.append(el('span', 'rail-name', name), el('span', 'rail-n', String(list.length)));
+        tip(rail, `Show ${name} full width`, key); rail.onclick = () => workOnly(s);
+        cols.appendChild(rail); continue;
+      }
+      const col = el('section', 'col');
       const opt = (b) => { const age = Math.max(0, daysBetween(b.statusDate || b.date, t)); return { path: !cfg.workGroup, age, stale: age >= cfg.stale, short: true }; };
-      col.appendChild(el('h2', null, `${s} (${list.length})`));
+      const hb = el('button', 'col-head', `${s} (${list.length})`), h2 = el('h2'); h2.appendChild(hb);
+      tip(hb, only ? 'Back to two columns' : `Show ${name} full width`, key); hb.onclick = () => workOnly(s);
+      col.appendChild(h2);
       if (!list.length) col.appendChild(empty('Nothing here.'));
       else if (cfg.workGroup) for (const k of drawGroups(col, list, st, ix, opt)) keys.add(k);
       else for (const b of list) col.appendChild(recLine(b, ix, opt(b)));
@@ -2110,7 +2271,7 @@ function markCur() {   // 重画之后把焦点标回去
 }
 const KEYS = [
   ['Move', [['J  ↓', 'Next item'], ['K  ↑', 'Previous item'], ['Shift+J  Ctrl+J', 'Next project heading'], ['Shift+K  Ctrl+K', 'Previous project heading'], ['g g', 'First item'], ['Shift+G', 'Last item'], ['Shift+M', 'Middle of the visible screen'], ['Alt+Shift+↑↓  Alt+Shift+J/K', 'Move record within its group (journal; or drag its dot)']]],
-  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['R', 'Show records that reference this one (↩)'], ['P', 'Group by project (Working, tags)'], ['H', 'Hide todo, wait and done records (project page)'], ['Z', 'Collapse or expand all projects or groups'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['D', 'Pick a date (journal)'], ['?', 'This help']]],
+  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['R', 'Show records that reference this one (↩)'], ['P', 'Group by project (Working, tags)'], ['E', 'Events only: hide todo, wait and done records (project page)'], ['Z', 'Collapse or expand all (journal, projects, groups)'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['H  L  ←  →', 'Previous · next day (journal)'], ['Shift+H  Shift+L', 'Previous · next day with records (journal)'], ['T', 'Today (journal)'], ['Y', 'Copy page or selected block as text (journal)'], ['T  W', 'TODO or WAIT full width · again for both columns (Working)'], ['D', 'Pick a date (journal)'], ['?', 'This help']]],
   ['Go to', NAV.map(([, label], i) => [`${i + 1}  Ctrl+Shift+${label[0]}`, label])],
   ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['[[', 'Project menu (journal)'], ['@  #', 'Suggest existing names and tags'], ['((', 'Reference another record'], ['/date', 'Insert a date from the calendar']]]
 ];
@@ -2197,8 +2358,15 @@ function navKey(e) {
   if (L === 'D' && view === 'journal' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#title').click(); }
   if (L === 'F' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#nav-toggle').click(); }
   if (L === 'S' && view !== 'journal') { const g = $('#view .icon-btn.sort'); if (g) { e.preventDefault(); g.click(); } return; }
-  if (L === 'Z' && !e.ctrlKey && !e.shiftKey) { const g = $('#view .icon-btn.foldall'); if (g) { e.preventDefault(); g.click(); } return; }
-  if (L === 'H' && !e.ctrlKey && !e.shiftKey && view === 'project') { const g = $('#view .icon-btn.tasks'); if (g) { e.preventDefault(); g.click(); } return; }
+  if (L === 'Z' && !e.ctrlKey && !e.shiftKey) { const g = view === 'journal' ? $('#jfold') : $('#view .icon-btn.foldall'); if (g && !g.hidden) { e.preventDefault(); g.click(); } return; }
+  if (view === 'journal' && !e.ctrlKey && (L === 'H' || L === 'L' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {   // 翻日：H / ← 前一天，L / → 后一天；加 Shift 跳到有记录的日子
+    e.preventDefault(); const dir = L === 'H' || e.key === 'ArrowLeft' ? -1 : 1;
+    return void (e.shiftKey ? jumpDay(dir) : stepDay(dir));
+  }
+  if (L === 'Y' && view === 'journal' && !e.ctrlKey) { e.preventDefault(); return void copyJournal(e.shiftKey); }   // Shift+Y：Roam 格式（隐藏功能，只在快捷键上）
+  if ((L === 'T' || L === 'W') && view === 'working' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void workOnly(L === 'T' ? 'TODO' : 'WAIT'); }
+  if (L === 'T' && view === 'journal' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#today').click(); }
+  if (L === 'E' && !e.ctrlKey && !e.shiftKey && view === 'project') { const g = $('#view .icon-btn.tasks'); if (g) { e.preventDefault(); g.click(); } return; }
   if (L === 'P' && !e.ctrlKey && !e.shiftKey && view !== 'journal') { const g = $('#view .icon-btn.grp'); if (g) { e.preventDefault(); g.click(); } return; }
   if (e.key === 'Escape') { if (cur) { navIdx = null; navCur = null; setCur(null); } return; }
   if (!cur || tag === 'BUTTON' && e.key === 'Enter') return;
@@ -2445,9 +2613,9 @@ document.addEventListener('mousedown', (e) => { if (blp && !e.target.closest('#b
 // 退出编辑后，同一页上的引文和被引用记录行尾的 ↩ N 立刻更新，不必重画整页
 function refreshBacklinks() {
   if (view !== 'journal') return;
-  const ix = index(S);
+  const ix = index(S), byKey = new Map(); walk(S.pages[cur] || [], (x) => byKey.set(x.key, x));   // 只在当前页里找，不用每块都翻遍全部文件
   for (const node of document.querySelectorAll('#editor .block')) {
-    const row = node.firstElementChild, loc = find(S, node.dataset.key), b = loc && loc.b;
+    const row = node.firstElementChild, b = byKey.get(node.dataset.key);
     if (!row || !b || row.classList.contains('editing')) continue;
     const view = row.querySelector('.view');
     if (view && view.querySelector('.qref')) fillView(view, b, ix);   // 引文跟着原记录的最新文字走

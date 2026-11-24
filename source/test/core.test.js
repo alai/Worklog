@@ -199,3 +199,26 @@ console.log('ALL OK');
   if (r !== 'true,cab,true,abc,false,false,abc') throw new Error('moveBefore: ' + r);
   console.log('moveBefore OK');
 }
+{ // 行内代码：处理代码段以外的文字时如果又用到同一个正则（比如引文里也有代码），不能让外层重复输出代码段
+  const C = require('../src/core.js');
+  const r = C.outsideCode('a `x` b `y` c', (p) => { C.maskCode('q `z`'); C.outsideCode('m `n`', (x) => x); return p; }, (c) => '[' + c + ']');
+  if (r !== 'a [`x`] b [`y`] c') throw new Error('outsideCode nested: ' + r);
+  console.log('inline code nested OK');
+}
+{ // 只改文字时就地更新的索引，必须和整体重建的结果完全一样
+  const C = require('../src/core.js'), S = C.newState(), T = '2026-11-24';
+  C.loadPage(S, T, '- a #x @Tom\n- b ((zzzzzzzzzz))\n- c\n', T); C.settle(S, T); C.ensureIds(S, T, T);
+  const [a, b, c] = S.pages[T];
+  const snap = (ix) => JSON.stringify({ tags: [...ix.tags].map(([k, v]) => [k, [...v].sort()]).sort(), refs: [...ix.refs].map(([k, v]) => [k, [...v].sort()]).sort(), brefs: [...ix.brefs].map(([k, v]) => [k, v.map((x) => x.key).sort()]).sort() });
+  C.index(S);
+  const edits = [[a, 'a #y @Tom @Ann'], [b, 'b ((' + a.id + ')) #x'], [c, 'c ((' + a.id + ')) `#nope` #x'], [a, 'a plain'], [b, 'b']];
+  for (const [blk, t] of edits) {
+    const before = C.index(S); blk.text = t; C.retext(S, blk); const patched = C.index(S);
+    if (patched !== before) throw new Error('retext rebuilt instead of patching');
+    const got = snap(patched); C.bump(S); const full = snap(C.index(S));
+    if (got !== full) throw new Error('retext mismatch after "' + t + '": ' + got + ' vs ' + full);
+  }
+  const st0 = C.stats(S, T); C.move(S, c.key, -1); if (C.stats(S, T) !== st0) throw new Error('reorder rebuilt stats');
+  if (S.pages[T].map((x) => x.text[0]).join('') !== 'acb') throw new Error('move order');
+  console.log('incremental index OK');
+}

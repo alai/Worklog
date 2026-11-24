@@ -1,4 +1,4 @@
-# Worklog 0.37
+# Worklog 0.39
 
 A local, plain-text journal for projects and tasks. One HTML file, no server, no account. Your data is a folder of Markdown files on your own computer.
 
@@ -6,8 +6,8 @@ A local, plain-text journal for projects and tasks. One HTML file, no server, no
 
 ## Getting started
 
-1. [Download Worklog-0.37.zip](https://github.com/alai/Worklog/releases/download/v0.37/Worklog-0.37.zip), unzip it, and open `worklog.html` in desktop **Chrome or Edge**. Safari and Firefox cannot read and write local folders, so they are not supported.
-2. Click **Choose workspace folder**, select this `Worklog-0.37` folder, and allow the browser to view and edit files in it.
+1. [Download Worklog-0.39.zip](https://github.com/alai/Worklog/releases/download/v0.39/Worklog-0.39.zip), unzip it, and open `worklog.html` in desktop **Chrome or Edge**. Safari and Firefox cannot read and write local folders, so they are not supported.
+2. Click **Choose workspace folder**, select this `Worklog-0.39` folder, and allow the browser to view and edit files in it.
 3. Start writing. The app creates a `data/` folder on first use and saves each day as one file there, for example `data/2026-11-15.md`.
 
 If Chrome or Edge prompts for folder access again when you open `worklog.html`, click **Reopen**.
@@ -21,7 +21,7 @@ Release packages contain no `data/` or `backups/` folder, so copying a whole new
 ## Try the demo data first
 
 `demo/` holds 60 days of sample records: several projects with branches, to-dos and waiting items.
-In the app, go to **Settings → Change folder** and select the `demo` folder. Switch back the same way by selecting `Worklog-0.37`.
+In the app, go to **Settings → Change folder** and select the `demo` folder. Switch back the same way by selecting `Worklog-0.39`.
 
 ## Basics
 
@@ -30,6 +30,7 @@ In the app, go to **Settings → Change folder** and select the `demo` folder. S
 - Type `[[` to create or reference a project. Records indented under a project belong to it; top-level records go to the Inbox.
 - Type `((` and a few words to quote another record. The quote always shows the original's current text; click it to jump there. A record that is quoted shows `↩ N` at the end of its line.
 - Wrap text in backticks for inline code: `` `git log @Tom` ``. Inside code, `@`, `#`, `((`, `[[` and `/date` are plain text.
+- Press `Y` (or the copy button next to the file name) to copy the journal page as text, ready to paste into email or chat. Fold or select first to copy only part of it.
 - Ctrl/Cmd+Enter cycles a record through none → TODO → WAIT → DONE.
 - Tag people with `@name` and categories with `#kind`. Write `@{Li Wei}` when a name contains a space. Typing `@` or `#` suggests names and tags you have already used. Click a tag to list every record that carries it.
 - Press `?` for the full list of keyboard shortcuts.

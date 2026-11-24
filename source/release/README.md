@@ -30,6 +30,7 @@ In the app, go to **Settings → Change folder** and select the `demo` folder. S
 - Type `[[` to create or reference a project. Records indented under a project belong to it; top-level records go to the Inbox.
 - Type `((` and a few words to quote another record. The quote always shows the original's current text; click it to jump there. A record that is quoted shows `↩ N` at the end of its line.
 - Wrap text in backticks for inline code: `` `git log @Tom` ``. Inside code, `@`, `#`, `((`, `[[` and `/date` are plain text.
+- Press `Y` (or the copy button next to the file name) to copy the journal page as text, ready to paste into email or chat. Fold or select first to copy only part of it.
 - Ctrl/Cmd+Enter cycles a record through none → TODO → WAIT → DONE.
 - Tag people with `@name` and categories with `#kind`. Write `@{Li Wei}` when a name contains a space. Typing `@` or `#` suggests names and tags you have already used. Click a tag to list every record that carries it.
 - Press `?` for the full list of keyboard shortcuts.

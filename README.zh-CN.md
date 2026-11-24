@@ -1,11 +1,11 @@
-# Worklog 0.37
+# Worklog 0.39
 
 本地、纯文本的个人项目与任务日志。一个 HTML 文件，没有服务器、没有账号，数据就是你电脑上的 Markdown 文件。
 
 ## 开始使用
 
-1. [下载 Worklog-0.37.zip](https://github.com/alai/Worklog/releases/download/v0.37/Worklog-0.37.zip)，解压后用桌面版 **Chrome 或 Edge** 打开 `worklog.html`（Safari 和 Firefox 不支持读写本地文件夹）。
-2. 点 **Choose workspace folder**，选中这个 `Worklog-0.37` 文件夹，并允许浏览器查看和修改其中的文件。
+1. [下载 Worklog-0.39.zip](https://github.com/alai/Worklog/releases/download/v0.39/Worklog-0.39.zip)，解压后用桌面版 **Chrome 或 Edge** 打开 `worklog.html`（Safari 和 Firefox 不支持读写本地文件夹）。
+2. 点 **Choose workspace folder**，选中这个 `Worklog-0.39` 文件夹，并允许浏览器查看和修改其中的文件。
 3. 开始写。应用第一次使用时会自动建好 `data/` 文件夹，每天的记录保存为其中的一个文件，如 `data/2026-11-15.md`。
 
 以后再打开 `worklog.html`，如果浏览器提示重新授权，点击 **Reopen**。
@@ -19,7 +19,7 @@
 ## 先看看演示数据
 
 `demo/` 里有一份 60 天的示例（内容为英文），包含若干项目、分支、待办和等待事项。
-打开应用后进入 **Settings → Change folder**，选 `demo` 文件夹。看完再用同样的方式选回 `Worklog-0.37`。
+打开应用后进入 **Settings → Change folder**，选 `demo` 文件夹。看完再用同样的方式选回 `Worklog-0.39`。
 
 ## 基本用法
 
@@ -28,6 +28,7 @@
 - 输入 `[[` 创建或引用项目；记录缩进在项目下面就归入该项目，顶层记录进入 Inbox。
 - 输入 `((` 加几个关键词即可引用另一条记录。引用处总是显示原记录的当前文字，点击跳转到原处；被引用的记录行尾会显示 `↩ N`。
 - 用反引号把文字包起来就是行内代码：`` `git log @Tom` ``。代码里的 `@`、`#`、`((`、`[[` 和 `/date` 都只是文字。
+- 按 `Y`（或文件名旁的复制按钮）把当前 Journal 页复制为文本，可直接贴进邮件或聊天。先折叠或选中某条，就只复制一部分。
 - Ctrl/Cmd+Enter 在 无 → TODO → WAIT → DONE 之间切换状态。
 - 用 `@名字` 标记人，`#类型` 标记类别；名字里有空格时写成 `@{Li Wei}`。输入 `@` 或 `#` 时会提示已经用过的名字和标签。点击标签可以列出全部相关记录。
 - 按 `?` 查看全部键盘快捷键。

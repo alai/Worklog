@@ -9,7 +9,7 @@ const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 let S = newState(), cur = today(), readOnly = false, rendering = false, ac = null, origin = null;
 let showSide = false, prevLines = new Set(), view = 'journal', viewArg = null;
-const APP_VERSION = '0.37';
+const APP_VERSION = '0.39';
 // 外观由三项组合：THEMES 选亮暗（System 跟随系统），PALETTES 选色板，cfg.color 选着色强度（Full/Soft/Mono）。
 // 登记在这里的名字会自动出现在 Settings；对应的变量写在 style.css
 const THEMES = { light: 'Light', dark: 'Dark' };
@@ -18,7 +18,8 @@ const cfg = { chip: 'date', theme: 'system', nav: 'wide', stale: 7, quiet: 14, f
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('worklog-cfg') || '{}')); } catch (e) { /* 忽略 */ }
 function saveCfg() { try { localStorage.setItem('worklog-cfg', JSON.stringify(cfg)); } catch (e) { /* 忽略 */ } applyTheme(); }
 const darkMq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
-function applyTheme() { const r = document.documentElement; if (PALETTES[cfg.palette] && cfg.palette !== 'default') r.dataset.palette = cfg.palette; else delete r.dataset.palette; r.dataset.color = cfg.color; document.documentElement.dataset.theme = THEMES[cfg.theme] ? cfg.theme : (darkMq && darkMq.matches ? 'dark' : 'light'); }
+function applyTheme() { const r = document.documentElement; if (PALETTES[cfg.palette] && cfg.palette !== 'default') r.dataset.palette = cfg.palette; else delete r.dataset.palette; r.dataset.color = cfg.color; document.documentElement.dataset.theme = THEMES[cfg.theme] ? cfg.theme : (darkMq && darkMq.matches ? 'dark' : 'light');
+  const m = document.querySelector('meta[name=theme-color]'), bg = getComputedStyle(r).getPropertyValue('--bg').trim(); if (m && bg) m.content = bg; }   // 给浏览器的顶栏颜色建议：桌面 Chrome 只在安装成应用时采用
 if (darkMq) darkMq.addEventListener('change', applyTheme);
 applyTheme();
 const dirty = new Set(), force = new Set();
@@ -99,6 +100,62 @@ function richPart(line, P, byId) {
   }
   return out + esc(line.slice(i));
 }
+// ---- 复制 Journal：文本（附带一份 HTML 给邮件）或 Roam 格式 ----
+const ROAM_MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function roamDate(d) { const [y, m, n] = d.split('-').map(Number), th = n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'; return `[[${ROAM_MONTH[m - 1]} ${n}${th}, ${y}]]`; }
+function exportLine(line, roam, ix) {   // 一行正文换成目标格式；代码段原样保留
+  return outsideCode(line, (t) => t.replace(TOKEN, (all, esc1, pjName, pj, rec, person, kind) => {
+    if (esc1) return esc1.slice(1);
+    if (pj) { const path = ix.P[pj] ? projectPath(ix.P, pj) : pjName; return roam ? `[[${path.split(' / ').join('/')}]]` : path; }
+    if (rec) return ix.byId[rec] ? '“' + refText(ix.byId[rec]) + '”' : '“unknown record”';
+    if (person) { const n = person.slice(1).replace(/[{}]/g, ''); return roam ? `[[${n}]]` : '@' + n; }
+    const n = kind.slice(1).replace(/[{}]/g, ''); return roam ? (/\s/.test(n) ? `#[[${n}]]` : '#' + n) : '#' + n;
+  }).replace(/\[\[(\d{4}-\d{2}-\d{2})\]\]/g, (all, d) => (roam ? roamDate(d) : d)));
+}
+function exportJournal(roam) {
+  const ix = index(S), sel = navCur && find(S, navCur), list = sel ? [sel.b] : S.pages[cur] || [];
+  let n = 0, hidden = 0; const txt = [], html = [];
+  const hiddenCount = (bs) => bs.reduce((k, b) => k + (b.del || b.type === 'raw' || (b.type === 'ord' && !hasContent(b)) ? 0 : 1) + hiddenCount(b.children), 0);
+  const walk = (bs, depth) => {
+    const items = [];
+    for (const b of bs) {
+      if (b.del || b.type === 'raw' || (b.type === 'ord' && !hasContent(b))) continue;
+      n++;
+      let first, rest = [], strong = false;
+      if (b.type === 'head') { const path = ix.P[b.proj] ? projectPath(ix.P, b.proj) : (b.label || 'unknown project'); first = roam ? `[[${path.split(' / ').join('/')}]]` : path; strong = true; }
+      else if (b.type === 'proj' || b.type === 'branch') { const path = b.id && ix.P[b.id] ? projectPath(ix.P, b.id) : b.text; first = (roam ? `[[${path.split(' / ').join('/')}]]` : path) + (b.type === 'proj' ? ' (new project)' : ' (new branch)'); strong = true; }
+      else {
+        const lines = b.text.split('\n').map((l) => exportLine(l, roam, ix));
+        first = lines[0]; rest = lines.slice(1);
+        if (b.status) first = (roam ? (b.status === 'DONE' ? '{{[[DONE]]}} ' : b.status === 'WAIT' ? '{{[[TODO]]}} #WAIT ' : '{{[[TODO]]}} ') : `[${b.status}${b.status === 'WAIT' && b.statusDate ? ' since ' + b.statusDate.slice(5) : ''}] `) + first;
+      }
+      const pad = roam ? '    '.repeat(depth) : '  '.repeat(depth);
+      txt.push(roam ? `${pad}- ${first}` : `${pad}${strong ? '■' : '•'} ${first}`);
+      for (const r of rest) txt.push(roam ? `${pad}    ${r}` : `${pad}  ${r}`);   // 续行跟在同一条下面
+      let kids = '';
+      if (b.children.length) { if (jFold.has(b.key)) hidden += hiddenCount(b.children); else kids = walk(b.children, depth + 1); }
+      const body = [first, ...rest].map(esc).join('<br>').replace(/`([^`\n]*)`/g, '<code>$1</code>');
+      items.push(`<li>${strong ? `<b>${body}</b>` : body}${kids}</li>`);
+    }
+    return items.length ? `<ul>${items.join('')}</ul>` : '';
+  };
+  const ul = walk(list, 0);
+  if (!n) return { n: 0 };
+  const [y, m, d] = cur.split('-').map(Number), title = `${cur} ${WEEK[new Date(y, m - 1, d).getDay()]}`;
+  const text = roam ? txt.join('\n') : `${title}\n\n${txt.join('\n')}`;
+  return { n, hidden, text, html: `<p><b>${esc(title)}</b></p>${ul}`, sel: !!sel };
+}
+async function copyJournal(roam) {
+  const r = exportJournal(roam);
+  if (!r.n) return toast('Nothing to copy on this page');
+  try {
+    if (!roam && window.ClipboardItem) await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([r.text], { type: 'text/plain' }), 'text/html': new Blob([r.html], { type: 'text/html' }) })]);
+    else await navigator.clipboard.writeText(r.text);
+  } catch (e) { return toast('Could not copy: ' + e.message); }
+  const btn = $('#copy'); btn.classList.add('done'); clearTimeout(btn._t); btn._t = setTimeout(() => btn.classList.remove('done'), 1500);
+  toast(`${roam ? 'Copied for Roam' : 'Copied as text'} · ${r.n} ${r.n === 1 ? 'record' : 'records'}${r.sel ? ' (selected block)' : ''}${r.hidden ? ` · ${r.hidden} folded left out` : ''}`);
+  return r;
+}
 // ---- block 引用 ----
 // 被引用记录第一行的纯文字：项目引用换成项目名、花括号去掉；它里面再引用别的记录时只展开一层
 function refText(b, depth = 0) {
@@ -133,9 +190,32 @@ function lockedBlock(b, st) {
   const id = b.type === 'ord' ? b.own : b.type === 'head' ? b.proj : b.id;
   return !!(id && st.N[id] && st.N[id].closed);
 }
+// Journal 的折叠：只记在内存里（块的 key 每次打开都会重新生成）
+const jFold = new Set();
+const countAll = (list) => list.reduce((n, b) => n + 1 + countAll(b.children), 0);
+function unfoldTo(key, list = S.pages[cur] || []) {   // 要聚焦的块如果藏在折叠里，把一路的上级都打开
+  for (const b of list) { if (b.key === key || unfoldTo(key, b.children)) { if (b.key !== key) jFold.delete(b.key); return true; } }
+  return false;
+}
+function jFoldBtn() {
+  const g = $('#jfold'), tops = (S.pages[cur] || []).filter((b) => b.children.length), all = tops.length && tops.every((b) => jFold.has(b.key));
+  g.hidden = !tops.length; if (!tops.length) return;
+  g.innerHTML = foldAllIcon(all); tip(g, all ? 'Expand all' : 'Collapse all', 'Z');
+  g.onclick = () => {
+    if (all) for (const b of tops) jFold.delete(b.key);
+    else { for (const b of tops) jFold.add(b.key); const top = navCur && tops.find((b) => b.key === navCur || find(S, navCur) && unfoldPath(b, navCur)); if (top) navCur = top.key; }
+    render();
+  };
+}
+const unfoldPath = (b, key) => b.children.some((c) => c.key === key || unfoldPath(c, key));   // key 是否在 b 下面
+function toggleFold(b) {
+  if (jFold.has(b.key)) jFold.delete(b.key); else { jFold.add(b.key); if (navCur && unfoldPath(b, navCur)) navCur = b.key; }
+  render();
+}
 function render(focusKey, pos) {
   if (view !== 'journal') return;
   rendering = true; closeAc(); ensurePage();
+  if (focusKey) unfoldTo(focusKey);
   const [y, m, d] = cur.split('-').map(Number);
   $('#title').textContent = `${cur} ${WEEK[new Date(y, m - 1, d).getDay()]}`;
   const ix = index(S), root = $('#editor');
@@ -146,7 +226,8 @@ function render(focusKey, pos) {
     for (const b of list) {
       const node = el('div', 'block'); node.dataset.key = b.key;
       node.appendChild(drawRow(b, parent, ix));
-      if (b.children.length) node.appendChild(draw(b.children, b));
+      if (b.children.length && jFold.has(b.key)) node.classList.add('shut');
+      else if (b.children.length) node.appendChild(draw(b.children, b));
       wrap.appendChild(node);
     }
     return wrap;
@@ -154,7 +235,7 @@ function render(focusKey, pos) {
   root.appendChild(draw(S.pages[cur], null));
   rendering = false;
   if (showSide) updateSide();
-  markCur();
+  jFoldBtn(); markCur();
   if (focusKey) focusBlock(focusKey, pos);
 }
 
@@ -172,6 +253,14 @@ function drawRow(b, parent, ix) {
   const bul = el('span', 'bullet' + (b.type === 'head' ? ' ring' : b.type === 'proj' || b.type === 'branch' ? ' square' : ''));
   row.appendChild(bul);
   if (!locked && !b.del) dragBullet(bul, b);
+  if (b.children.length) {   // 有子项的块可以折叠：箭头平时悬停才出现，折叠后一直显示
+    const shut = jFold.has(b.key), n = countAll(b.children), c = el('button', 'jchev' + (shut ? ' shut' : ''));
+    c.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2.5L7.5 6 4 9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    c.setAttribute('aria-expanded', String(!shut)); tip(c, shut ? `Expand (${n} inside)` : 'Collapse');
+    c.onmousedown = (e) => e.preventDefault(); c.onclick = (e) => { e.stopPropagation(); toggleFold(b); };
+    row.appendChild(c);
+    if (shut) { const m = el('button', 'jmore', `+${n}`); tip(m, `${n} hidden · click to expand`); m.onmousedown = (e) => e.preventDefault(); m.onclick = (e) => { e.stopPropagation(); toggleFold(b); }; row._more = m; }
+  }
   if (b.type === 'ord' && b.status) {
     const st = el('button', 'status ' + b.status, chipLabel(b));
     st.title = `Edit status · ${b.status} since ${b.statusDate}`;
@@ -196,6 +285,7 @@ function drawRow(b, parent, ix) {
     body.appendChild(ta);
   }
   row.appendChild(body);
+  if (row._more) row.appendChild(row._more);
 
   if (b.type === 'proj') bul.title = `Project, created ${b.date}`;
   if (b.type === 'head') bul.title = 'Project heading';
@@ -254,7 +344,7 @@ function onBlur(e, b, row, parent) {
   closeAc(); origin = null;
   const v = S.ver, ta = e.target;
   // 只改了文字时 commitBlock 不一定让索引失效；这里补上，标签页、补全候选、反向链接才会立刻更新，也会立即保存
-  if (!readOnly && ta && ta._t0 !== undefined && ta._t0 !== ta.value) { ta._t0 = ta.value; bump(S); }
+  if (!readOnly && ta && ta._t0 !== undefined && ta._t0 !== ta.value) { ta._t0 = ta.value; retext(S, b); }
   if (!readOnly) commitBlock(S, b, today());
   const ix = index(S);
   if (e.relatedTarget && row.contains(e.relatedTarget)) { row.classList.remove('editing'); fillView(row.querySelector('.view'), b, ix); if (b.type === 'ord') row.querySelector('textarea').value = b.text; }
@@ -332,6 +422,12 @@ function onKey(e, b, ta) {
   if (dir) { e.preventDefault(); if (moveBlock(b.key, dir)) render(b.key, pos); return; }
 }
 // 上下移动记录：Alt+Shift+↑↓ 或 Alt+Shift+J/K（按物理键判断，Mac 上 Option 会把 J/K 变成别的字符）
+function stepDay(n) { go(shiftDay(cur, n)); }
+function jumpDay(dir) {   // 跳到前 / 后一个有记录的日子，中间的空白日期跳过
+  const days = Object.keys(S.pages).filter((d) => validDate(d) && (dir < 0 ? d < cur : d > cur) && S.pages[d].some(hasContent)).sort();
+  const d = dir < 0 ? days[days.length - 1] : days[0];
+  if (d) go(d); else toast(dir < 0 ? 'No earlier days with records' : 'No later days with records');
+}
 function moveDir(e) {
   if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey || e.isComposing) return 0;
   return e.key === 'ArrowUp' || e.code === 'KeyK' ? -1 : e.key === 'ArrowDown' || e.code === 'KeyJ' ? 1 : 0;
@@ -596,9 +692,11 @@ async function start() {
 }
 
 async function boot() {
-  $('#prev').onclick = () => go(shiftDay(cur, -1));
-  $('#next').onclick = () => go(shiftDay(cur, 1));
+  $('#prev').onclick = () => stepDay(-1);
+  $('#next').onclick = () => stepDay(1);
   $('#today').onclick = () => go(today());
+  $('#copy').onclick = () => copyJournal(false); tip($('#copy'), 'Copy as text', 'Y');
+  tip($('#prev'), 'Previous day', 'H'); tip($('#next'), 'Next day', 'L'); tip($('#today'), 'Go to today', 'T');
   $('#add').onclick = () => { if (readOnly) return; const nb = mk({ date: cur }); S.pages[cur].push(nb); render(nb.key, 0); };
   $('#side-toggle').onclick = () => { showSide = !showSide; $('#side').hidden = !showSide; $('#side-toggle').setAttribute('aria-pressed', String(showSide)); if (showSide) { prevLines = new Set(); updateSide(); } };
   $('#nav-toggle').onclick = () => { cfg.nav = cfg.nav === 'narrow' ? 'wide' : 'narrow'; saveCfg(); drawNav(); };

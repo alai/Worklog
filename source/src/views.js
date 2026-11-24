@@ -91,7 +91,7 @@ function editRec(r, t, b, o) {
     if (!r.isConnected) return;
     origin = null;
     if (!ta.value.trim()) { b.text = before; toast('Empty text ignored. Delete records in the journal.'); }
-    else { b.text = ta.value; commitBlock(S, b, today()); if (b.text !== before) bump(S); }   // 只改了文字也要保存：以前这里漏掉了，改动只留在内存里
+    else { b.text = ta.value; commitBlock(S, b, today()); if (b.text !== before) retext(S, b); }   // 只改了文字也要保存：以前这里漏掉了，改动只留在内存里
     const opt = { ...o, noStatus: false, stale: false };
     if (o.age != null && b.statusDate) { opt.age = Math.max(0, daysBetween(b.statusDate, today())); opt.stale = (b.status === 'TODO' || b.status === 'WAIT') && opt.age >= cfg.stale; }
     const fresh = recLine(b, index(S), opt);
@@ -247,7 +247,7 @@ function drawProjectPage(root, id, st, ix) {
   if (recs.length) h2.appendChild(taskBtn(hide));
   root.appendChild(h2);
   if (!recs.length) return root.appendChild(empty('No records yet.'));
-  if (!shown.length) return root.appendChild(empty('Only tasks here. Press H to show them.'));
+  if (!shown.length) return root.appendChild(empty('Only tasks here. Press E to show them.'));
   shown.sort(pageNew ? byDateDesc : byDateAsc);
   let day = null;
   for (const b of shown.slice(0, 400)) { if (b.date !== day) root.appendChild(el('div', 'day', day = b.date)); const r = recLine(b, ix, { path: b.own !== id }); r.firstChild.remove(); root.appendChild(r); }
@@ -256,7 +256,7 @@ function drawProjectPage(root, id, st, ix) {
 function taskBtn(hide) {
   const g = el('button', 'icon-btn tasks');
   g.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3.5" width="4" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.6 5.6l.9.9 1.6-1.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 5.5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M2.5 13.5h15M2.5 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/></svg>';
-  tip(g, hide ? 'Show todo, wait and done records' : 'Hide todo, wait and done records', 'H'); g.setAttribute('aria-pressed', String(hide));
+  tip(g, hide ? 'Show todo, wait and done records' : 'Hide todo, wait and done records', 'E'); g.setAttribute('aria-pressed', String(hide));
   g.onclick = () => { cfg.pageEvents = !hide; saveCfg(); drawView(); };
   return g;
 }
@@ -298,6 +298,7 @@ function drawGroups(root, list, st, ix, opt) {
   return order.map((k) => view + ':' + (viewArg || '') + ':' + k);
 }
 // 分组状态下的全部收起 / 展开（不分组时没有可收的东西，不显示）
+function workOnly(s) { cfg.workOnly = cfg.workOnly === s ? null : s; saveCfg(); navIdx = null; drawView(); }
 function groupFoldBtn(keys) {
   const allFolded = keys.every((k) => grpFold.has(k)), g = el('button', 'icon-btn foldall');
   g.innerHTML = `${foldAllIcon(allFolded)}`;
@@ -370,13 +371,22 @@ function drawViewBody() {
     if (!ids.length) root.appendChild(empty(view === 'archive' ? 'No archived projects.' : 'No projects yet. Type [[ in the journal to create one.'));
     for (const id of ids) root.appendChild(drawProject(id, st, ix, true));
   } else if (view === 'working') {
-    const cols = el('div', 'cols');
+    // 一栏全宽：另一栏收成一条窄竖条，留在原来的位置，写着名字和条数，点它就切过去
+    const only = cfg.workOnly === 'TODO' || cfg.workOnly === 'WAIT' ? cfg.workOnly : null, cols = el('div', 'cols' + (only ? ' only-' + only.toLowerCase() : ''));
     h1.append(groupBtn('workGroup'), sortBtn('workOrder', false));
     const keys = new Set();
     for (const s of ['TODO', 'WAIT']) {
-      const list = st.open.filter((b) => b.status === s).sort(byStart(newest('workOrder', false))), col = el('section', 'col');
+      const list = st.open.filter((b) => b.status === s).sort(byStart(newest('workOrder', false))), key = s[0], name = s === 'TODO' ? 'TODO' : 'WAIT';
+      if (only && only !== s) {
+        const rail = el('button', 'rail'); rail.append(el('span', 'rail-name', name), el('span', 'rail-n', String(list.length)));
+        tip(rail, `Show ${name} full width`, key); rail.onclick = () => workOnly(s);
+        cols.appendChild(rail); continue;
+      }
+      const col = el('section', 'col');
       const opt = (b) => { const age = Math.max(0, daysBetween(b.statusDate || b.date, t)); return { path: !cfg.workGroup, age, stale: age >= cfg.stale, short: true }; };
-      col.appendChild(el('h2', null, `${s} (${list.length})`));
+      const hb = el('button', 'col-head', `${s} (${list.length})`), h2 = el('h2'); h2.appendChild(hb);
+      tip(hb, only ? 'Back to two columns' : `Show ${name} full width`, key); hb.onclick = () => workOnly(s);
+      col.appendChild(h2);
       if (!list.length) col.appendChild(empty('Nothing here.'));
       else if (cfg.workGroup) for (const k of drawGroups(col, list, st, ix, opt)) keys.add(k);
       else for (const b of list) col.appendChild(recLine(b, ix, opt(b)));
@@ -429,7 +439,7 @@ function markCur() {   // 重画之后把焦点标回去
 }
 const KEYS = [
   ['Move', [['J  ↓', 'Next item'], ['K  ↑', 'Previous item'], ['Shift+J  Ctrl+J', 'Next project heading'], ['Shift+K  Ctrl+K', 'Previous project heading'], ['g g', 'First item'], ['Shift+G', 'Last item'], ['Shift+M', 'Middle of the visible screen'], ['Alt+Shift+↑↓  Alt+Shift+J/K', 'Move record within its group (journal; or drag its dot)']]],
-  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['R', 'Show records that reference this one (↩)'], ['P', 'Group by project (Working, tags)'], ['H', 'Hide todo, wait and done records (project page)'], ['Z', 'Collapse or expand all projects or groups'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['D', 'Pick a date (journal)'], ['?', 'This help']]],
+  ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['R', 'Show records that reference this one (↩)'], ['P', 'Group by project (Working, tags)'], ['E', 'Events only: hide todo, wait and done records (project page)'], ['Z', 'Collapse or expand all (journal, projects, groups)'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['H  L  ←  →', 'Previous · next day (journal)'], ['Shift+H  Shift+L', 'Previous · next day with records (journal)'], ['T', 'Today (journal)'], ['Y', 'Copy page or selected block as text (journal)'], ['T  W', 'TODO or WAIT full width · again for both columns (Working)'], ['D', 'Pick a date (journal)'], ['?', 'This help']]],
   ['Go to', NAV.map(([, label], i) => [`${i + 1}  Ctrl+Shift+${label[0]}`, label])],
   ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['[[', 'Project menu (journal)'], ['@  #', 'Suggest existing names and tags'], ['((', 'Reference another record'], ['/date', 'Insert a date from the calendar']]]
 ];
@@ -516,8 +526,15 @@ function navKey(e) {
   if (L === 'D' && view === 'journal' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#title').click(); }
   if (L === 'F' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#nav-toggle').click(); }
   if (L === 'S' && view !== 'journal') { const g = $('#view .icon-btn.sort'); if (g) { e.preventDefault(); g.click(); } return; }
-  if (L === 'Z' && !e.ctrlKey && !e.shiftKey) { const g = $('#view .icon-btn.foldall'); if (g) { e.preventDefault(); g.click(); } return; }
-  if (L === 'H' && !e.ctrlKey && !e.shiftKey && view === 'project') { const g = $('#view .icon-btn.tasks'); if (g) { e.preventDefault(); g.click(); } return; }
+  if (L === 'Z' && !e.ctrlKey && !e.shiftKey) { const g = view === 'journal' ? $('#jfold') : $('#view .icon-btn.foldall'); if (g && !g.hidden) { e.preventDefault(); g.click(); } return; }
+  if (view === 'journal' && !e.ctrlKey && (L === 'H' || L === 'L' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {   // 翻日：H / ← 前一天，L / → 后一天；加 Shift 跳到有记录的日子
+    e.preventDefault(); const dir = L === 'H' || e.key === 'ArrowLeft' ? -1 : 1;
+    return void (e.shiftKey ? jumpDay(dir) : stepDay(dir));
+  }
+  if (L === 'Y' && view === 'journal' && !e.ctrlKey) { e.preventDefault(); return void copyJournal(e.shiftKey); }   // Shift+Y：Roam 格式（隐藏功能，只在快捷键上）
+  if ((L === 'T' || L === 'W') && view === 'working' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void workOnly(L === 'T' ? 'TODO' : 'WAIT'); }
+  if (L === 'T' && view === 'journal' && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); return void $('#today').click(); }
+  if (L === 'E' && !e.ctrlKey && !e.shiftKey && view === 'project') { const g = $('#view .icon-btn.tasks'); if (g) { e.preventDefault(); g.click(); } return; }
   if (L === 'P' && !e.ctrlKey && !e.shiftKey && view !== 'journal') { const g = $('#view .icon-btn.grp'); if (g) { e.preventDefault(); g.click(); } return; }
   if (e.key === 'Escape') { if (cur) { navIdx = null; navCur = null; setCur(null); } return; }
   if (!cur || tag === 'BUTTON' && e.key === 'Enter') return;
@@ -764,9 +781,9 @@ document.addEventListener('mousedown', (e) => { if (blp && !e.target.closest('#b
 // 退出编辑后，同一页上的引文和被引用记录行尾的 ↩ N 立刻更新，不必重画整页
 function refreshBacklinks() {
   if (view !== 'journal') return;
-  const ix = index(S);
+  const ix = index(S), byKey = new Map(); walk(S.pages[cur] || [], (x) => byKey.set(x.key, x));   // 只在当前页里找，不用每块都翻遍全部文件
   for (const node of document.querySelectorAll('#editor .block')) {
-    const row = node.firstElementChild, loc = find(S, node.dataset.key), b = loc && loc.b;
+    const row = node.firstElementChild, b = byKey.get(node.dataset.key);
     if (!row || !b || row.classList.contains('editing')) continue;
     const view = row.querySelector('.view');
     if (view && view.querySelector('.qref')) fillView(view, b, ix);   // 引文跟着原记录的最新文字走

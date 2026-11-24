@@ -141,6 +141,17 @@ footer{display:flex;gap:12px;padding:3px 16px;border-top:1px solid var(--line);f
 .bullet{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none;margin-top:9px}
 .bullet.square{border-radius:2px;background:var(--ink)}
 .bullet.grip{position:relative;cursor:grab}
+.row{position:relative}
+.jchev{position:absolute;left:-14px;top:7px;width:16px;height:16px;padding:2px;border:0;border-radius:4px;background:none;color:var(--faint);cursor:pointer;opacity:0;transition:transform .12s}
+.jchev svg{width:12px;height:12px;display:block}
+.jchev:not(.shut){transform:rotate(90deg)}
+.row:hover>.jchev,.jchev.shut,.jchev:focus-visible{opacity:1}
+.jchev:hover{color:var(--ink);background:var(--soft)}
+.block.shut>.row .bullet{box-shadow:0 0 0 3px var(--line)}
+.jmore{border:0;background:none;padding:0 4px;margin-top:5px;border-radius:9px;font-size:11px;line-height:18px;color:var(--faint);cursor:pointer;flex:none}
+.jmore:hover{color:var(--ink);background:var(--soft)}
+header .icon-btn.foldall{margin-left:-6px}
+#copy.done{color:var(--accent)}
 .bullet.grip::after{content:'';position:absolute;inset:-8px -7px}
 .block.dragging{opacity:.4}
 body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
@@ -212,6 +223,7 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
 .rec-hidden{font-weight:400;color:var(--faint)}
 .empty{color:var(--faint);font-size:13px;margin:4px 0}
 .rec{position:relative;display:flex;align-items:baseline;gap:0 10px;padding:2px 32px 2px 6px;border-radius:6px;cursor:pointer}
+.rec{content-visibility:auto;contain-intrinsic-size:auto 28px}   /* 长列表里屏幕外的行先不排版：几百行的标签页、Working 页切换快一倍 */
 .rec:hover,.rec.cur,.row.cur,.pj-head.cur,.grp-head.cur{background:var(--soft)}
 .pj-head.cur .fold,.grp-head.cur .fold{background:var(--line);color:var(--ink)}
 .row.cur.editing,.rec.cur.editing{background:var(--edit)}
@@ -239,6 +251,15 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
 .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px}
 .col{min-width:0}
 .col h2{margin-top:0!important}
+.cols.only-todo{grid-template-columns:minmax(0,1fr) 30px}
+.cols.only-wait{grid-template-columns:30px minmax(0,1fr)}
+.col-head{all:unset;cursor:pointer;border-radius:5px;padding:1px 4px;margin:-1px -4px}
+.col-head:hover{background:var(--soft);color:var(--ink)}
+.col-head:focus-visible{outline:2px solid var(--accent)}
+.rail{display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 0;border:1px dashed var(--line2);border-radius:8px;background:none;color:var(--muted);cursor:pointer;font:inherit;font-size:11px;font-weight:600;letter-spacing:.06em;align-self:start;min-height:120px}
+.rail .rail-name{writing-mode:vertical-rl}
+.rail .rail-n{font-weight:400;color:var(--faint);letter-spacing:0}
+.rail:hover{background:var(--soft);color:var(--ink);border-style:solid}
 .pj.top{margin-bottom:18px}
 .pj-head{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;padding:2px 6px 2px 2px;border-radius:8px;min-height:30px}
 .pj-head.foldable{cursor:pointer}
@@ -358,5 +379,5 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
 .bk-row .mini.arm{border-color:var(--warn);color:var(--warn);background:var(--warn-bg)}
 #toast{position:fixed;left:50%;bottom:36px;transform:translateX(-50%);background:var(--ink);color:var(--on);padding:8px 16px;border-radius:8px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30;max-width:90vw}
 #toast.show{opacity:1}
-@media (max-width:900px){main{flex-direction:column}#side{flex:none;max-width:none;border-left:0;border-top:1px solid var(--line)}.cols{grid-template-columns:1fr}}
+@media (max-width:900px){main{flex-direction:column}#side{flex:none;max-width:none;border-left:0;border-top:1px solid var(--line)}.cols,.cols.only-todo,.cols.only-wait{grid-template-columns:1fr}.rail{flex-direction:row;justify-content:center;min-height:0;padding:6px 0}.rail .rail-name{writing-mode:horizontal-tb}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
