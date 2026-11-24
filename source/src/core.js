@@ -365,6 +365,14 @@ function move(S, key, dir) {
   bump(S); return true;
 }
 
+function moveBefore(S, key, beforeKey) {   // 拖动用：放到同一层的 beforeKey 前面（null 为最后）
+  const loc = find(S, key); if (!loc) return false;
+  const list = loc.list, j = beforeKey ? list.findIndex((x) => x.key === beforeKey) : list.length;
+  if (j < 0 || beforeKey === key || list[loc.index + 1] && list[loc.index + 1].key === beforeKey || (!beforeKey && loc.index === list.length - 1)) return false;
+  list.splice(loc.index, 1); list.splice(j > loc.index ? j - 1 : j, 0, loc.b);
+  bump(S); return true;
+}
+
 function newAfter(S, key) {
   const loc = find(S, key), nb = mk({ date: loc.page });
   if (loc.b.children.length || (loc.b.type !== 'ord' && loc.b.type !== 'raw')) loc.b.children.unshift(nb);
@@ -518,4 +526,4 @@ function setLife(S, id, today) {
   return { ok: true, page: b.page };
 }
 
-if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate, maskCode, outsideCode, inCode };
+if (typeof module !== 'undefined') module.exports = { stats, setLife, daysBetween, mk, newState, bump, find, flat, index, projects, recordsByTag, referenced, projectPath, matchProjects, childCtx, ownerAt, wrapInProject, resolveConflict, commitBlock, ensureIds, serializePage, parseFile, loadPage, settle, indent, outdent, move, moveBefore, newAfter, newBefore, split, mergeUp, deleteBlock, cycleStatus, createProject, normalizeRefs, eachBlock, hasContent, validDate, maskCode, outsideCode, inCode };

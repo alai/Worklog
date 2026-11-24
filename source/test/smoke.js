@@ -319,6 +319,35 @@
       log.push('inline code: pair="' + paired + '" in code: tag menu=' + tagMenu + ' ref menu=' + refMenu + ' no (()) pair=' + noAuto + ' date picker=' + picker + ' | ` types over=' + over + ' | after code: tag menu=' + tagAfter + ' | empty pair backspace=' + bsPair + ' "' + afterBs + '" | wrap selection=' + wrapped);
       log.push('inline code render: code=' + JSON.stringify(codes) + ' person spans outside=' + (view ? view.querySelectorAll('.person').length : -1) + ' tag @Ma indexed=' + recordsByTag(S, '@Ma').length);
     }
+    // ---- 移动记录 ----
+    { await go('2031-07-05'); q('#add').click(); let ta = act();
+      const k = (key, o = {}) => { const ev = new KeyboardEvent('keydown', { key, code: o.code, altKey: !!o.alt, shiftKey: !!o.shift, bubbles: true, cancelable: true }); act().dispatchEvent(ev); return ev.defaultPrevented; };
+      for (const t of ['mv-A', 'mv-B', 'mv-C']) { ta = act(); ta.value = t; ta.dispatchEvent(new Event('input')); if (t !== 'mv-C') k('Enter'); }
+      const order = () => S.pages[cur].filter((b) => /^mv-/.test(b.text)).map((b) => b.text).join(',');
+      act().blur(); await sleep(30); S.pages[cur] = S.pages[cur].filter((b) => b.text); bump(S); render(S.pages[cur].find((b) => b.text === 'mv-B').key, 0);   // 去掉新页面自带的空行，只留三条
+      const o0 = order(); k('ArrowUp', { alt: true, shift: true }); const o1 = order(), f1 = act().value;
+      const kPrevented = k('Ô', { alt: true, shift: true, code: 'KeyK' }); const o2 = order(), txt = act().value;   // Mac 上 Option+Shift+K 的 key 不是 k
+      q('#toast').textContent = ''; k('Ô', { alt: true, shift: true, code: 'KeyK' }); const edge = q('#toast').textContent;
+      log.push('move while editing: ' + o0 + ' -> Alt+Shift+Up -> ' + o1 + ' focus="' + f1 + '" | Alt+Shift+K -> ' + o2 + ' text kept="' + txt + '" prevented=' + kPrevented + ' | at top: toast="' + edge + '"');
+      act().blur(); await sleep(50);
+      { // 选中状态：J/K 选到 mv-B，Alt+Shift+J 下移，焦点跟着走
+        const kb = (key, o = {}) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key, code: o.code || 'Key' + key.toUpperCase(), altKey: !!o.alt, shiftKey: !!o.shift, bubbles: true, cancelable: true }));
+        const curText = () => { const c = q('#editor .row.cur .view'); return c && c.textContent; };
+        kb('g'); kb('g'); for (let i = 0; i < 40 && curText() !== 'mv-B'; i++) kb('j');
+        kb('Ô', { alt: true, shift: true, code: 'KeyJ' }); const s1 = order(), c1 = curText(), editing = !!q('#editor textarea:focus');
+        kb('ArrowDown', { alt: true, shift: true, code: 'ArrowDown' }); const s2 = order(), c2 = curText();
+        log.push('move while selected: Alt+Shift+J -> ' + s1 + ' cursor="' + c1 + '" editing=' + editing + ' | Alt+Shift+Down -> ' + s2 + ' cursor="' + c2 + '"');
+      }
+      { // 拖动圆点：把 mv-A 拖到 mv-B 前面；拖动中有插入线；Esc 取消
+        const blk = (t) => qa('#editor .block').find((x) => x.querySelector(':scope > .row .view') && x.querySelector(':scope > .row .view').textContent === t);
+        const pe = (type, el, y) => (el || window).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 30, clientY: y, pointerId: 1 }));
+        const drag = (from, to, cancel) => { const b = blk(from).querySelector(':scope > .row .bullet'), r = b.getBoundingClientRect(), t = blk(to).getBoundingClientRect();
+          pe('pointerdown', b, r.top + 2); pe('pointermove', null, r.top + 12); pe('pointermove', null, t.top + 3); const lineShown = !q('#dropline').hidden, dim = blk(from).classList.contains('dragging');
+          if (cancel) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); else pe('pointerup', null, t.top + 3); return lineShown + '/' + dim; };
+        const before = order(), d1 = drag('mv-A', 'mv-B'), after1 = order(), d2 = drag('mv-B', 'mv-C', true), after2 = order(), grip = getComputedStyle(blk('mv-A').querySelector('.bullet')).cursor;
+        log.push('drag dot: ' + before + ' -> drag mv-A onto mv-B -> ' + after1 + ' (line/dim ' + d1 + ') | Esc cancels -> ' + after2 + ' line hidden=' + q('#dropline').hidden + ' cursor=' + grip);
+      }
+    }
     // ---- backups ----
     const bkMap = () => window.__subs.get('backups') || new Map(), bkNames = () => [...bkMap().keys()].sort();
     const T0 = today(), mdCount = () => [...__store.keys()].filter((k) => /\.md$/.test(k)).length;

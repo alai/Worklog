@@ -144,8 +144,12 @@ function pjHead(id, st, ix, folded, onFold, count) {
   }
   const name = el('button', 'pj-name', p.name); name.onclick = () => show('project', id);
   head.appendChild(name);
-  if (folded && count) head.appendChild(el('span', 'pj-count', `(${p.subEvents})`));
-  const m = [`(${p.days}) days`]; if (p.subTodo) m.push(`(${p.subTodo}) todos`); if (p.subWait) m.push(`(${p.subWait}) waiting`);
+  if (p.kids.length) {   // 有几个分支：决定要不要点开，所以紧跟在名字后面
+    const done = p.kids.filter((k) => st.N[k].life).length;
+    head.appendChild(tip(el('span', 'count pj-kids', String(p.kids.length)), `${p.kids.length} ${p.kids.length === 1 ? 'branch' : 'branches'}${done ? ` (${done} completed)` : ''}`));
+  }
+  const m = [`(${p.days}) days`];
+  if (folded && count) m.unshift(`(${p.subEvents}) ${p.subEvents === 1 ? 'event' : 'events'}`);   // 收起时才数：展开后事件就在眼前 if (p.subTodo) m.push(`(${p.subTodo}) todos`); if (p.subWait) m.push(`(${p.subWait}) waiting`);
   const tail = el('span', 'pj-tail');   // 胶囊和平时隐藏的打开图标绑在一起换行，免得图标单独占一行留下空白
   if (p.quiet >= cfg.quiet) tail.appendChild(tip(el('span', 'quiet', `quiet ${p.quiet}d`), `No new records for ${p.quiet} days (last ${p.subLast})`));
   tail.append(el('span', 'cap ' + p.status, p.status), openBtn('Open project page', () => show('project', id), 'in'));
@@ -424,10 +428,10 @@ function markCur() {   // 重画之后把焦点标回去
   if (n) n.classList.add('cur');
 }
 const KEYS = [
-  ['Move', [['J  ↓', 'Next item'], ['K  ↑', 'Previous item'], ['Shift+J  Ctrl+J', 'Next project heading'], ['Shift+K  Ctrl+K', 'Previous project heading'], ['g g', 'First item'], ['Shift+G', 'Last item'], ['Shift+M', 'Middle of the visible screen']]],
+  ['Move', [['J  ↓', 'Next item'], ['K  ↑', 'Previous item'], ['Shift+J  Ctrl+J', 'Next project heading'], ['Shift+K  Ctrl+K', 'Previous project heading'], ['g g', 'First item'], ['Shift+G', 'Last item'], ['Shift+M', 'Middle of the visible screen'], ['Alt+Shift+↑↓  Alt+Shift+J/K', 'Move record within its group (journal; or drag its dot)']]],
   ['Act', [['Enter', 'Edit record · fold or unfold heading'], ['Esc', 'Leave editing · clear focus'], ['O', 'Open record in journal · open project page'], ['R', 'Show records that reference this one (↩)'], ['P', 'Group by project (Working, tags)'], ['H', 'Hide todo, wait and done records (project page)'], ['Z', 'Collapse or expand all projects or groups'], ['S', 'Reverse time order'], ['F', 'Collapse or expand sidebar'], ['/', 'Search'], ['D', 'Pick a date (journal)'], ['?', 'This help']]],
   ['Go to', NAV.map(([, label], i) => [`${i + 1}  Ctrl+Shift+${label[0]}`, label])],
-  ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['Alt+Shift+↑↓', 'Move block (journal)'], ['[[', 'Project menu (journal)'], ['@  #', 'Suggest existing names and tags'], ['((', 'Reference another record'], ['/date', 'Insert a date from the calendar']]]
+  ['While editing', [['Ctrl/Cmd+Enter', 'Cycle none → TODO → WAIT → DONE'], ['Shift+Enter', 'Continuation line'], ['Tab  Shift+Tab', 'Indent · outdent (journal)'], ['[[', 'Project menu (journal)'], ['@  #', 'Suggest existing names and tags'], ['((', 'Reference another record'], ['/date', 'Insert a date from the calendar']]]
 ];
 function toggleHelp() {
   const d = $('#help');
@@ -447,6 +451,14 @@ function toggleHelp() {
 let lastG = 0;   // gg：两次 g 的间隔在 600 ms 内才算
 function navKey(e) {
   if (dp || blp) return;   // 日期选择器或引用列表开着时，键盘归它
+  if (e.altKey) {   // 选中状态下 Alt+Shift+↑↓ / J/K 移动记录（编辑状态由编辑框自己处理）
+    const dir = moveDir(e), a = document.activeElement;
+    if (dir && view === 'journal' && !(a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT'))) {
+      const row = $('#editor .row.cur'), key = row && row.parentNode.dataset.key;
+      if (key) { e.preventDefault(); if (moveBlock(key, dir)) { navCur = key; render(); } }
+    }
+    return;
+  }
   if (openingWorkspace || $('#app').hidden || e.metaKey || e.altKey || e.isComposing) return;
   const L = e.code && e.code.startsWith('Key') ? e.code[3] : (e.key || '').length === 1 ? e.key.toUpperCase() : '';
   // 侧栏跳转：Ctrl+Shift+首字母，在任何地方都有效（包括编辑中）

@@ -9,7 +9,7 @@ const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 let S = newState(), cur = today(), readOnly = false, rendering = false, ac = null, origin = null;
 let showSide = false, prevLines = new Set(), view = 'journal', viewArg = null;
-const APP_VERSION = '0.36';
+const APP_VERSION = '0.37';
 // 外观由三项组合：THEMES 选亮暗（System 跟随系统），PALETTES 选色板，cfg.color 选着色强度（Full/Soft/Mono）。
 // 登记在这里的名字会自动出现在 Settings；对应的变量写在 style.css
 const THEMES = { light: 'Light', dark: 'Dark' };
@@ -171,6 +171,7 @@ function drawRow(b, parent, ix) {
   const row = el('div', 'row' + (b.del ? ' deleted' : '') + (b.type === 'raw' ? ' raw' : b.type !== 'ord' ? ' decl' : ''));
   const bul = el('span', 'bullet' + (b.type === 'head' ? ' ring' : b.type === 'proj' || b.type === 'branch' ? ' square' : ''));
   row.appendChild(bul);
+  if (!locked && !b.del) dragBullet(bul, b);
   if (b.type === 'ord' && b.status) {
     const st = el('button', 'status ' + b.status, chipLabel(b));
     st.title = `Edit status · ${b.status} since ${b.statusDate}`;
@@ -327,7 +328,55 @@ function onKey(e, b, ta) {
     if (r.ok) return done(r.focus, r.pos);
     e.preventDefault(); return;
   }
-  if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.altKey && e.shiftKey) { move(S, b.key, e.key === 'ArrowUp' ? -1 : 1); return done(b.key, pos); }
+  const dir = moveDir(e);
+  if (dir) { e.preventDefault(); if (moveBlock(b.key, dir)) render(b.key, pos); return; }
+}
+// 上下移动记录：Alt+Shift+↑↓ 或 Alt+Shift+J/K（按物理键判断，Mac 上 Option 会把 J/K 变成别的字符）
+function moveDir(e) {
+  if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey || e.isComposing) return 0;
+  return e.key === 'ArrowUp' || e.code === 'KeyK' ? -1 : e.key === 'ArrowDown' || e.code === 'KeyJ' ? 1 : 0;
+}
+// 只在同一层的兄弟之间移动；跨到别的项目下面是 Tab / Shift+Tab 的事
+function moveBlock(key, dir) {
+  const loc = find(S, key);
+  if (readOnly || !loc || lockedBlock(loc.b, stats(S, today()))) return false;
+  if (!move(S, key, dir)) { toast(dir < 0 ? 'Already first in this group' : 'Already last in this group'); return false; }
+  touch(true); return true;
+}
+// 拖动圆点调整顺序，规则和键盘移动一样
+function dragBullet(bul, b) {
+  bul.classList.add('grip'); tip(bul, 'Drag to reorder', 'Alt+Shift+↑↓');
+  bul.onpointerdown = (e) => {
+    if (e.button !== 0 || readOnly) return;
+    const node = bul.closest('.block'), wrap = node && node.parentNode, others = wrap ? [...wrap.children].filter((x) => x !== node && x.classList.contains('block')) : [];
+    if (!others.length) return;
+    e.preventDefault();
+    const y0 = e.clientY; let on = false, before;
+    const line = $('#dropline');
+    const end = (ok) => {
+      window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', cancel); window.removeEventListener('keydown', esc, true);
+      line.hidden = true; node.classList.remove('dragging'); document.body.classList.remove('reordering');
+      if (!ok || !on) return;
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // 先把正在编辑的文字提交
+      if (moveBlock_(b.key, before)) { navCur = b.key; render(); }
+    };
+    const mv = (ev) => {
+      if (!on && Math.abs(ev.clientY - y0) < 4) return;
+      if (!on) { on = true; node.classList.add('dragging'); document.body.classList.add('reordering'); }
+      let g = others.findIndex((x) => { const r = x.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
+      if (g < 0) g = others.length;
+      before = others[g] ? others[g].dataset.key : null;
+      const wr = wrap.getBoundingClientRect(), y = others[g] ? others[g].getBoundingClientRect().top : others[others.length - 1].getBoundingClientRect().bottom;
+      line.style.top = (y - 1) + 'px'; line.style.left = wr.left + 'px'; line.style.width = wr.width + 'px'; line.hidden = false;
+    };
+    const up = () => end(true), cancel = () => end(false), esc = (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); end(false); } };
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', cancel); window.addEventListener('keydown', esc, true);
+  };
+}
+function moveBlock_(key, beforeKey) {
+  const loc = find(S, key);
+  if (readOnly || !loc || lockedBlock(loc.b, stats(S, today())) || !moveBefore(S, key, beforeKey)) return false;
+  touch(true); return true;
 }
 function hop(b, dir) {
   const order = flat(S, cur).filter((x) => x.type !== 'raw'), t = order[order.indexOf(b) + dir];

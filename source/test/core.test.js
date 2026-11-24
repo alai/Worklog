@@ -191,3 +191,11 @@ console.log('ALL OK');
   if (C.inCode('a `b') !== true || C.inCode('a `b` c') !== false || C.inCode('x `y`\nz') !== false) throw new Error('inCode');
   console.log('inline code OK');
 }
+{ // 拖动：放到同一层某条前面，或放到最后；放回原位不算改动
+  const C = require('../src/core.js'), S = C.newState(), T = '2026-11-24';
+  C.loadPage(S, T, '- a\n- b\n- c\n', T);
+  const L = () => S.pages[T].map((b) => b.text).join(''), k = (t) => S.pages[T].find((b) => b.text === t).key;
+  const r = [C.moveBefore(S, k('c'), k('a')), L(), C.moveBefore(S, k('c'), null), L(), C.moveBefore(S, k('a'), k('b')), C.moveBefore(S, k('c'), null), L()].join(',');
+  if (r !== 'true,cab,true,abc,false,false,abc') throw new Error('moveBefore: ' + r);
+  console.log('moveBefore OK');
+}
