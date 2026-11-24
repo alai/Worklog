@@ -14,7 +14,7 @@ If Chrome or Edge prompts for folder access again when you open `worklog.html`, 
 
 ## Upgrading
 
-Replace `worklog.html` with the one from the new version. That is all: your records and backups are not touched.
+[Download the latest worklog.html](https://github.com/alai/Worklog/releases/latest/download/worklog.html). Close Worklog, replace your existing `worklog.html` with the downloaded file, and reopen it in Chrome or Edge.
 
 Release packages contain no `data/` or `backups/` folder, so copying a whole new package over your workspace cannot overwrite your records either. Keeping your records in a separate folder, for example `~/Documents/Worklog-data`, makes this even safer: in the app choose that folder with **Settings → Change folder**.
 

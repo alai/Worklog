@@ -71,4 +71,7 @@ const cd = Buffer.concat(centrals), end = Buffer.alloc(22);
 end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10); end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
 const zipPath = path.join(outDir, name + '.zip');
 fs.writeFileSync(zipPath, Buffer.concat([...locals, cd, end]));
+const htmlPath = path.join(outDir, 'worklog.html');
+fs.copyFileSync(path.join(root, 'worklog.html'), htmlPath);
 console.log(`${root}\n${zipPath}  ${entries.length} entries, ${(fs.statSync(zipPath).size / 1024).toFixed(0)} KB`);
+console.log(htmlPath);

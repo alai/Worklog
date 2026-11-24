@@ -12,7 +12,7 @@
 
 ## 升级
 
-用新版本的 `worklog.html` 替换旧的那一个即可，你的记录和备份都不会被碰到。
+[下载最新版 worklog.html](https://github.com/alai/Worklog/releases/latest/download/worklog.html)，关闭 Worklog，用下载的文件替换现有的 `worklog.html`，然后用 Chrome 或 Edge 重新打开。
 
 发布包里不含 `data/` 和 `backups/` 文件夹，所以即使把整个新包复制进你的工作区，也不会覆盖你的记录。把记录放在单独的文件夹里（比如 `~/Documents/Worklog-data`）会更稳妥：在应用里用 **Settings → Change folder** 选中那个文件夹。
 
